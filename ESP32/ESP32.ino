@@ -47,17 +47,36 @@ String readLineFromSerial(const char *prompt) {
 void requestCredentials() {
   Serial.println();
   Serial.println("=========== CONFIGURACIÓN INICIAL ===========");
+  Serial.println();
 
   do {
     wifiSsid = readLineFromSerial("WiFi SSID: ");
+    if (wifiSsid.isEmpty()) {
+      Serial.println("El SSID no puede estar vacío.");
+    } else {
+      Serial.println("WiFi SSID introducido en el campo.");
+      Serial.println();
+    }
   } while (wifiSsid.isEmpty());
 
   do {
     wifiPassword = readLineFromSerial("WiFi Password: ");
+    if (wifiPassword.isEmpty()) {
+      Serial.println("La contraseña no puede estar vacía.");
+    } else {
+      Serial.println("WiFi Password introducido en el campo.");
+      Serial.println();
+    }
   } while (wifiPassword.isEmpty());
 
   do {
     telegramToken = readLineFromSerial("Token Telegram: ");
+    if (telegramToken.isEmpty()) {
+      Serial.println("El token no puede estar vacío.");
+    } else {
+      Serial.println("Token Telegram introducido en el campo.");
+      Serial.println();
+    }
   } while (telegramToken.isEmpty());
 
   Serial.println("==============================================");
@@ -162,7 +181,7 @@ bool syncTimeGMT5(unsigned long maxWaitMs = 60000) {
 // =========================================================
 //  VERIFICAR TOKEN DE TELEGRAM
 // =========================================================
-bool verifyTelegramToken() {
+bool verifyTelegramToken(uint8_t maxAttempts = 5, uint16_t retryDelayMs = 1000) {
   if (telegramBot == nullptr) {
     return false;
   }
@@ -170,7 +189,7 @@ bool verifyTelegramToken() {
   Serial.print("Verificando token Telegram... ");
 
   // En ocasiones el handshake TLS falla si la hora acaba de sincronizarse.
-  for (int attempt = 0; attempt < 3; attempt++) {
+  for (uint8_t attempt = 0; attempt < maxAttempts; attempt++) {
     if (telegramBot->getMe()) {
       Serial.println("OK");
       Serial.print("Bot detectado: @");
@@ -178,7 +197,7 @@ bool verifyTelegramToken() {
       return true;
     }
 
-    delay(750);
+    delay(retryDelayMs);
     Serial.print('.');
   }
 
@@ -243,22 +262,38 @@ void setup() {
   // -------------------------------------------------------
   //  VERIFICACIÓN ITERATIVA DEL TOKEN
   // -------------------------------------------------------
-  bool tokenValido = false;
+  bool tokenVerificado = false;
+  uint8_t intentosToken = 0;
+  const uint8_t maxIntentosToken = 2;  // cantidad de veces que se solicitará un token nuevo
 
-  do {
+  while (!tokenVerificado && intentosToken < maxIntentosToken) {
     delete telegramBot;
     telegramBot = new UniversalTelegramBot(telegramToken, telegramClient);
 
-    tokenValido = verifyTelegramToken();
+    tokenVerificado = verifyTelegramToken();
 
-    if (!tokenValido) {
-      Serial.println("Ingresa un token válido.");
-      telegramToken = readLineFromSerial("Nuevo token: ");
+    if (!tokenVerificado) {
+      intentosToken++;
+
+      if (intentosToken >= maxIntentosToken) {
+        Serial.println("No se pudo verificar el token tras varios intentos.");
+        Serial.println("Se continuará sin verificación; si el token es incorrecto el bot no responderá.");
+        break;
+      }
+
+      Serial.println("Ingresa un token válido o presiona Enter para reutilizarlo.");
+      String nuevoToken = readLineFromSerial("Nuevo token (vacío para mantener): ");
+
+      if (!nuevoToken.isEmpty()) {
+        telegramToken = nuevoToken;
+      }
     }
+  }
 
-  } while (!tokenValido);
+  if (tokenVerificado) {
+    Serial.println("Token verificado correctamente.");
+  }
 
-  Serial.println("Token verificado correctamente.");
   Serial.println("Sistema listo.");
 }
 
