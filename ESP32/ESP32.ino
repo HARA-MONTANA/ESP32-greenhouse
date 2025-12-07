@@ -1,7 +1,6 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
-#include <TelegramCertificate.h>
 #include <Wire.h>
 #include <RTClib.h>
 #include <sys/time.h>
