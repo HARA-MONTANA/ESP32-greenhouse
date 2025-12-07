@@ -2,7 +2,12 @@
 #include <WiFiClientSecure.h>
 #include <UniversalTelegramBot.h>
 #include <TelegramCertificate.h>
+#include <Wire.h>
+#include <RTClib.h>
+#include <sys/time.h>
 #include <time.h>
+
+#include "pins.h"
 
 // =========================================================
 //  VARIABLES GLOBALES
@@ -13,6 +18,10 @@ String telegramToken;
 
 WiFiClientSecure telegramClient;
 UniversalTelegramBot *telegramBot = nullptr;
+RTC_DS3231 rtc;
+bool rtcReady = false;
+
+const char *TZ_INFO = "GMT-5";
 
 
 // =========================================================
@@ -59,31 +68,94 @@ void requestCredentials() {
 // =========================================================
 //  NTP + ZONA HORARIA GMT-5
 // =========================================================
-void syncTimeGMT5() {
+void configureTimezone() {
+  setenv("TZ", TZ_INFO, 1);
+  tzset();
+}
+
+bool initRtc() {
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+
+  if (!rtc.begin()) {
+    Serial.println("RTC no encontrado en el bus I2C.");
+    return false;
+  }
+
+  Serial.println("RTC detectado correctamente.");
+  return true;
+}
+
+bool syncRtcFromSystemClock() {
+  if (!rtcReady) {
+    return false;
+  }
+
+  time_t now;
+  time(&now);
+
+  if (now < 10) {
+    return false;
+  }
+
+  rtc.adjust(DateTime(now));
+  Serial.println("RTC actualizado con la hora del sistema (NTP).");
+  return true;
+}
+
+bool setTimeFromRtc() {
+  if (!rtcReady) {
+    Serial.println("RTC no disponible para fijar la hora.");
+    return false;
+  }
+
+  DateTime rtcNow = rtc.now();
+
+  if (rtcNow.year() < 2020) {
+    Serial.println("RTC tiene una fecha inválida, no se usará como respaldo.");
+    return false;
+  }
+
+  timeval tv{rtcNow.unixtime(), 0};
+  settimeofday(&tv, nullptr);
+  configureTimezone();
+
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo)) {
+    Serial.println("Hora configurada desde el RTC.");
+    Serial.print("Hora local: ");
+    Serial.println(asctime(&timeinfo));
+    return true;
+  }
+
+  Serial.println("No se pudo leer la hora local tras usar el RTC.");
+  return false;
+}
+
+bool syncTimeGMT5(unsigned long maxWaitMs = 60000) {
   Serial.println("Sincronizando hora NTP (GMT-5)...");
 
-  const long gmtOffset_sec = -5 * 3600;  // UTC-5
-  const int daylightOffset_sec = 0;
+  // Ajuste horario fijo UTC-5 sin horario de verano
+  configTzTime(TZ_INFO, "pool.ntp.org", "time.nist.gov");
 
-  configTime(gmtOffset_sec, daylightOffset_sec, 
-             "pool.ntp.org", 
-             "time.nist.gov");
+  struct tm timeinfo;
+  unsigned long start = millis();
 
-  time_t now = time(nullptr);
-  while (now < 24 * 3600) {
-    delay(500);
+  while (millis() - start < maxWaitMs) {
+    if (getLocalTime(&timeinfo)) {
+      Serial.println();
+      Serial.println("Hora NTP sincronizada.");
+      Serial.print("Hora local: ");
+      Serial.println(asctime(&timeinfo));
+      return true;
+    }
+
     Serial.print('.');
-    now = time(nullptr);
+    delay(500);
   }
 
   Serial.println();
-  Serial.println("Hora NTP sincronizada.");
-
-  struct tm timeinfo;
-  getLocalTime(&timeinfo);
-
-  Serial.print("Hora local: ");
-  Serial.println(asctime(&timeinfo));
+  Serial.println("No se pudo sincronizar la hora NTP tras el tiempo de espera.");
+  return false;
 }
 
 
@@ -97,13 +169,20 @@ bool verifyTelegramToken() {
 
   Serial.print("Verificando token Telegram... ");
 
-  if (telegramBot->getMe()) {
-    Serial.println("OK");
-    Serial.print("Bot detectado: @");
-    Serial.println(telegramBot->userName);
-    return true;
+  // En ocasiones el handshake TLS falla si la hora acaba de sincronizarse.
+  for (int attempt = 0; attempt < 3; attempt++) {
+    if (telegramBot->getMe()) {
+      Serial.println("OK");
+      Serial.print("Bot detectado: @");
+      Serial.println(telegramBot->userName);
+      return true;
+    }
+
+    delay(750);
+    Serial.print('.');
   }
 
+  Serial.println();
   Serial.println("FALLÓ (token inválido o sin conexión)");
   return false;
 }
@@ -117,6 +196,9 @@ void setup() {
   while (!Serial) {
     delay(10);
   }
+
+  configureTimezone();
+  rtcReady = initRtc();
 
   requestCredentials();
 
@@ -139,7 +221,18 @@ void setup() {
   // -------------------------------------------------------
   //  SINCRONIZAR HORA NTP (IMPORTANTE PARA TLS)
   // -------------------------------------------------------
-  syncTimeGMT5();
+  bool timeSynced = syncTimeGMT5();
+
+  if (!timeSynced) {
+    Serial.println("NTP no respondió, intentando usar el RTC...");
+    timeSynced = setTimeFromRtc();
+  }
+
+  if (!timeSynced) {
+    Serial.println("Sin hora válida, continuando sin sincronización confirmada.");
+  } else if (!syncRtcFromSystemClock()) {
+    Serial.println("No se pudo actualizar el RTC con la hora obtenida.");
+  }
 
   // -------------------------------------------------------
   //  CONFIGURAR CLIENTE SEGURO PARA TELEGRAM
