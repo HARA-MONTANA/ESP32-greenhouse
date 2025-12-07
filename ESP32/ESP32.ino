@@ -53,7 +53,8 @@ void requestCredentials() {
     if (wifiSsid.isEmpty()) {
       Serial.println("El SSID no puede estar vacío.");
     } else {
-      Serial.println("WiFi SSID introducido en el campo.");
+      Serial.print("WiFi SSID: ");
+      Serial.println(wifiSsid);
       Serial.println();
     }
   } while (wifiSsid.isEmpty());
@@ -63,7 +64,8 @@ void requestCredentials() {
     if (wifiPassword.isEmpty()) {
       Serial.println("La contraseña no puede estar vacía.");
     } else {
-      Serial.println("WiFi Password introducido en el campo.");
+      Serial.print("WiFi Password: ");
+      Serial.println(wifiPassword);
       Serial.println();
     }
   } while (wifiPassword.isEmpty());
@@ -73,7 +75,8 @@ void requestCredentials() {
     if (telegramToken.isEmpty()) {
       Serial.println("El token no puede estar vacío.");
     } else {
-      Serial.println("Token Telegram introducido en el campo.");
+      Serial.print("Token Telegram: ");
+      Serial.println(telegramToken);
       Serial.println();
     }
   } while (telegramToken.isEmpty());
