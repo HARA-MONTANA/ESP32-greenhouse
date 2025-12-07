@@ -44,45 +44,44 @@ String readLineFromSerial(const char *prompt) {
 //  SOLICITAR CREDENCIALES
 // =========================================================
 void requestCredentials() {
-  Serial.println();
-  Serial.println("=========== CONFIGURACIÓN INICIAL ===========");
-  Serial.println();
-
   do {
-    wifiSsid = readLineFromSerial("WiFi SSID: ");
+    Serial.println();
+    Serial.println("WiFi SSID:");
+    wifiSsid = readLineFromSerial("> ");
     if (wifiSsid.isEmpty()) {
       Serial.println("El SSID no puede estar vacío.");
-    } else {
-      Serial.print("WiFi SSID: ");
-      Serial.println(wifiSsid);
-      Serial.println();
     }
   } while (wifiSsid.isEmpty());
 
   do {
-    wifiPassword = readLineFromSerial("WiFi Password: ");
+    Serial.println();
+    Serial.println("WiFi Password:");
+    wifiPassword = readLineFromSerial("> ");
     if (wifiPassword.isEmpty()) {
       Serial.println("La contraseña no puede estar vacía.");
-    } else {
-      Serial.print("WiFi Password: ");
-      Serial.println(wifiPassword);
-      Serial.println();
     }
   } while (wifiPassword.isEmpty());
 
   do {
-    telegramToken = readLineFromSerial("Token Telegram: ");
+    Serial.println();
+    Serial.println("Token Telegram:");
+    telegramToken = readLineFromSerial("> ");
     if (telegramToken.isEmpty()) {
       Serial.println("El token no puede estar vacío.");
-    } else {
-      Serial.print("Token Telegram: ");
-      Serial.println(telegramToken);
-      Serial.println();
     }
   } while (telegramToken.isEmpty());
 
-  Serial.println("==============================================");
+  Serial.println();
+  Serial.println("=========== CONFIGURACIÓN INICIAL ===========");
+  Serial.print("WiFi SSID: ");
+  Serial.println(wifiSsid);
+  Serial.print("WiFi Password: ");
+  Serial.println(wifiPassword);
+  Serial.print("Token Telegram: ");
+  Serial.println(telegramToken);
+  Serial.println();
   Serial.println("Credenciales recibidas.");
+  Serial.println("==============================================");
 }
 
 
