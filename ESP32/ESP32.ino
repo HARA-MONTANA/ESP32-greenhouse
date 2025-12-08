@@ -334,7 +334,8 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
   } else if (lower.startsWith("interval")) {
     int spaceIndex = lower.indexOf(' ');
     if (spaceIndex > 0) {
-      int days = max(1, lower.substring(spaceIndex + 1).toInt());
+      long daysArg = lower.substring(spaceIndex + 1).toInt();
+      int days = (int)max(1L, daysArg);
       setIrrigationIntervalDays(days);
       updated = true;
       return "Intervalo mínimo entre riegos actualizado a " + String(days) + " días";
