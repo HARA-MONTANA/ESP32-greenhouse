@@ -20,7 +20,10 @@ UniversalTelegramBot *telegramBot = nullptr;
 RTC_DS3231 rtc;
 bool rtcReady = false;
 
-const char *TZ_INFO = "GMT-5";
+// Configuración de zona horaria fija UTC-5 (sin horario de verano).
+// En la especificación POSIX el valor numérico representa las horas al oeste
+// de Greenwich, por lo que se utiliza "GMT5" para obtener UTC-5.
+const char *TZ_INFO = "GMT5";
 
 
 // =========================================================
