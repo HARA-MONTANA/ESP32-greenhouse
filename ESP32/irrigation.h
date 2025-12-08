@@ -4,6 +4,7 @@
 
 void initIrrigationHardware();
 int readSoilMoisture();
+int soilPercentFromAdc(int reading);
 bool checkSoilAndIrrigate();
 void irrigate(int initialSoilReading);
 void irrigateVolume(float totalMl, int initialSoilReading = -1);
