@@ -39,20 +39,37 @@ String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
   Serial.print(prompt);
   Serial.flush();
 
+  String line;
   unsigned long start = millis();
+  unsigned long lastDataTime = start;
 
-  while (!Serial.available()) {
+  while (true) {
+    while (Serial.available()) {
+      char c = Serial.read();
+
+      lastDataTime = millis();
+
+      if (c == '\n' || c == '\r') {
+        line.trim();
+        return line;
+      }
+
+      line += c;
+    }
+
+    if (!line.isEmpty() && millis() - lastDataTime > 150) {
+      line.trim();
+      return line;
+    }
+
     if (timeoutMs > 0 && millis() - start >= timeoutMs) {
       Serial.println();
+      line.trim();
       return "";
     }
 
     delay(20);
   }
-
-  String line = Serial.readStringUntil('\n');
-  line.trim();
-  return line;
 }
 
 String formatDateTime(const struct tm &timeinfo) {
@@ -111,7 +128,7 @@ void saveTelegramToken(const String &token) {
 //  SOLICITAR CREDENCIALES
 // =========================================================
 void requestCredentials() {
-  const uint32_t promptTimeoutMs = 60000;  // 1 minuto para cada valor
+  const uint32_t promptTimeoutMs = 30000;  // 30 segundos para cada valor
 
   wifiSsid = promptOrStoredValue("WiFi SSID:", storedWifiSsid, promptTimeoutMs);
   wifiPassword = promptOrStoredValue("WiFi Password:", storedWifiPassword, promptTimeoutMs);
