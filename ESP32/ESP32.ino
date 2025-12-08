@@ -7,6 +7,7 @@
 #include <time.h>
 #include <Preferences.h>
 #include <vector>
+#include <DHT.h>
 
 #include "pins.h"
 #include "config.h"
@@ -50,6 +51,7 @@ UniversalTelegramBot *telegramBot = nullptr;
 RTC_DS3231 rtc;
 bool rtcReady = false;
 String lastTelegramChatId;
+DHT dht(PIN_DHT, DHT22);
 
 // Configuración de zona horaria (por defecto UTC-5, sin horario de verano).
 // En la especificación POSIX el valor numérico representa las horas al oeste
@@ -102,6 +104,12 @@ String formatDateTime(const struct tm &timeinfo) {
   char buffer[20];
   strftime(buffer, sizeof(buffer), "%d/%m/%Y %H:%M:%S", &timeinfo);
   return String(buffer);
+}
+
+bool readAmbient(float &tempC, float &humidity) {
+  tempC = dht.readTemperature();
+  humidity = dht.readHumidity();
+  return !isnan(tempC) && !isnan(humidity);
 }
 
 String promptOrStoredValue(const char *label, const String &storedValue, uint32_t timeoutMs) {
@@ -187,16 +195,15 @@ String formatLastIrrigation() {
 
 String formatIrrigationConfig() {
   String msg;
-  msg += "=========== CONFIGURACIÓN RIEGO ===========\n";
-  msg += "Etapa actual: " + stageToString(getCurrentStage()) + "\n";
+  msg += "Configuración del invernadero\n";
+  msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
-  msg += "Volumen maceta (L): " + String(getPotVolumeL()) + "\n";
-  msg += "Caudal bomba (mL/s): " + String(getPumpFlow()) + "\n";
-  msg += "Umbral humedad suelo (%): " + String(getSoilThreshold()) + "\n";
-  msg += "Umbral humedad alta (%): " + String(getSoilHighThreshold()) + "\n";
-  msg += "Intervalo mínimo entre riegos (días): " + String(getIrrigationIntervalDays()) + "\n";
-  msg += "===========================================";
+  msg += "Maceta: " + String(getPotVolumeL(), 1) + " L\n";
+  msg += "Bomba: " + String(getPumpFlow(), 1) + " mL/s\n";
+  msg += "Umbral suelo: " + String(getSoilThreshold()) + "%\n";
+  msg += "Umbral humedad alta: " + String(getSoilHighThreshold()) + "%\n";
+  msg += "Intervalo mínimo entre riegos: " + String(getIrrigationIntervalDays()) + " días";
   return msg;
 }
 
@@ -215,20 +222,28 @@ String formatStatus() {
     nowStr = formatDateTime(timeinfo);
   }
 
+  float ambientTemp = NAN;
+  float ambientRh = NAN;
+  bool ambientOk = readAmbient(ambientTemp, ambientRh);
+
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
   String msg;
-  msg += "===== STATUS ACTUAL =====\n";
-  msg += "Hora: " + nowStr + "\n";
+  msg += "Estado del invernadero\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
+  if (ambientOk) {
+    msg += "Temperatura y humedad: " + String(ambientTemp, 1) + "°C, " + String(ambientRh, 0) + "%\n";
+  } else {
+    msg += "Temperatura y humedad: N/D\n";
+  }
   msg += "Humedad suelo: " + String(soilPercent) + "% (ADC " + String(soilAdc) + ")\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
+  msg += "Hora: " + nowStr + "\n";
   msg += "Riego automático: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF") + "\n";
-  msg += "Autolecturas: " + String(autoReadingsEnabled ? "ON" : "OFF") + " cada " + String(autoReadingsIntervalMs / 60000) + " min\n";
+  msg += "Autolecturas: " + String(autoReadingsEnabled ? "ON" : "OFF") + (autoReadingsEnabled ? " cada " + String(autoReadingsIntervalMs / 60000) + " min" : "") + "\n";
   msg += "Ventilador: " + String(fanAuto ? "AUTO" : "MANUAL") + (fanAuto ? "" : " " + String(fanPercent) + "%") + "\n";
   msg += "Alertas: " + String(alertsEnabled ? "ON" : "OFF") + "\n";
-  msg += "Ciclo de luz: N/D\n";
-  msg += "==========================";
+  msg += "Ciclo de luz: N/D";
   return msg;
 }
 
@@ -873,6 +888,8 @@ void setup() {
   while (!Serial) {
     delay(10);
   }
+
+  dht.begin();
 
   configInit();
   configLoad();

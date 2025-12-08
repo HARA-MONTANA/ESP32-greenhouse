@@ -7,6 +7,7 @@
 
 // Declarada en ESP32.ino para reenviar a Serial y Telegram
 void broadcastMessage(const String &msg);
+String stageToString(plantStage stage);
 
 namespace {
 const int R_Agua = PIN_RELE1;
@@ -30,7 +31,8 @@ bool checkSoilAndIrrigate() {
 
   const int highThreshold = getSoilHighThreshold();
   if (highThreshold > 0 && soilPercent >= highThreshold) {
-    broadcastMessage("Humedad alta detectada, se evita riego automático.");
+    broadcastMessage("Riego omitido: humedad alta detectada en suelo (" + String(soilPercent) + "% >= " + String(highThreshold) +
+                     "%).");
     return false;
   }
 
@@ -67,28 +69,33 @@ void irrigate(int initialSoilReading) {
 void irrigateVolume(float totalMl, int initialSoilReading) {
   plantStage stage = getCurrentStage();
   const float pumpFlow = getPumpFlow();
-  const int initialPercent = initialSoilReading >= 0 ? soilPercentFromAdc(initialSoilReading) : soilPercentFromAdc(readSoilMoisture());
+  const int initialAdc = initialSoilReading >= 0 ? initialSoilReading : readSoilMoisture();
+  const int initialPercent = soilPercentFromAdc(initialAdc);
   float pumpTimeMs = 0.0f;
 
   if (pumpFlow > 0.0f) {
     pumpTimeMs = (totalMl / pumpFlow) * 1000.0f;
   }
 
+  const float pumpTimeSeconds = pumpTimeMs / 1000.0f;
+
   digitalWrite(R_Agua, LOW);
   delay(static_cast<unsigned long>(pumpTimeMs));
   digitalWrite(R_Agua, HIGH);
 
-  String logMsg = "Riego etapa: " + String(static_cast<int>(stage));
-  logMsg += ", ml_totales: " + String(totalMl, 2);
-  logMsg += ", tiempo_ms: " + String(pumpTimeMs, 0);
-  logMsg += ", humedad_inicial: " + String(initialSoilReading);
+  const int finalReading = readSoilMoisture();
+  const int finalPercent = soilPercentFromAdc(finalReading);
+
+  String logMsg = "Riego completado | Etapa: " + stageToString(stage);
+  logMsg += " | Volumen: " + String(totalMl, 1) + " mL";
+  logMsg += " | Duración: " + String(pumpTimeSeconds, 1) + " s";
+  logMsg += " | Humedad: " + String(initialPercent) + "% → " + String(finalPercent) + "% (ADC " + String(initialAdc) +
+            " → " + String(finalReading) + ")";
 
   broadcastMessage(logMsg);
 
-  const int finalReading = readSoilMoisture();
-  const int finalPercent = soilPercentFromAdc(finalReading);
   if (finalPercent <= initialPercent) {
-    broadcastMessage("ERROR: la humedad del suelo no aumentó tras el riego. Verificar bomba y tuberías.");
+    broadcastMessage("⚠️ Riego sin incremento de humedad; verifica bomba, mangueras y válvulas.");
   }
 
   time_t now;
