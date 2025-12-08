@@ -41,10 +41,13 @@ String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
 
   String line;
   unsigned long start = millis();
+  unsigned long lastDataTime = start;
 
   while (true) {
     while (Serial.available()) {
       char c = Serial.read();
+
+      lastDataTime = millis();
 
       if (c == '\n' || c == '\r') {
         line.trim();
@@ -54,8 +57,14 @@ String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
       line += c;
     }
 
+    if (!line.isEmpty() && millis() - lastDataTime > 150) {
+      line.trim();
+      return line;
+    }
+
     if (timeoutMs > 0 && millis() - start >= timeoutMs) {
       Serial.println();
+      line.trim();
       return "";
     }
 
