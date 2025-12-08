@@ -52,6 +52,10 @@ RTC_DS3231 rtc;
 bool rtcReady = false;
 String lastTelegramChatId;
 DHT dht(PIN_DHT, DHT22);
+float lastDhtTempC = NAN;
+float lastDhtRh = NAN;
+unsigned long lastDhtReadMs = 0;
+bool lastDhtValid = false;
 
 // Configuración de zona horaria (por defecto UTC-5, sin horario de verano).
 // En la especificación POSIX el valor numérico representa las horas al oeste
@@ -107,9 +111,33 @@ String formatDateTime(const struct tm &timeinfo) {
 }
 
 bool readAmbient(float &tempC, float &humidity) {
+  const unsigned long now = millis();
+  const unsigned long minIntervalMs = 2000;
+
+  if (lastDhtValid && now - lastDhtReadMs < minIntervalMs) {
+    tempC = lastDhtTempC;
+    humidity = lastDhtRh;
+    return true;
+  }
+
   tempC = dht.readTemperature();
   humidity = dht.readHumidity();
-  return !isnan(tempC) && !isnan(humidity);
+
+  if (isnan(tempC) || isnan(humidity)) {
+    delay(80);
+    tempC = dht.readTemperature();
+    humidity = dht.readHumidity();
+  }
+
+  if (isnan(tempC) || isnan(humidity)) {
+    return false;
+  }
+
+  lastDhtTempC = tempC;
+  lastDhtRh = humidity;
+  lastDhtReadMs = now;
+  lastDhtValid = true;
+  return true;
 }
 
 String promptOrStoredValue(const char *label, const String &storedValue, uint32_t timeoutMs) {
@@ -302,6 +330,8 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       updated = true;
       return "Etapa actualizada a " + stageToken;
     }
+  } else if (lower == "status") {
+    return formatStatus();
   } else if (lower.startsWith("ml")) {
     int firstSpace = lower.indexOf(' ');
     int secondSpace = lower.indexOf(' ', firstSpace + 1);
@@ -363,7 +393,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
     return formatIrrigationConfig();
   }
 
-  return "Comandos: stage <etapa>, ml <etapa> <valor>, pot <L>, flow <mL/s>, soil <pct>, soilmax <pct>, interval <dias>, reset, show";
+  return "Comandos: stage <etapa>, ml <etapa> <valor>, pot <L>, flow <mL/s>, soil <pct>, soilmax <pct>, interval <dias>, status, reset, show";
 }
 
 void handleSerialCommands() {
