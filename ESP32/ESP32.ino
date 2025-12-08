@@ -7,6 +7,7 @@
 #include <time.h>
 #include <Preferences.h>
 #include <vector>
+#include <DHT.h>
 
 #include "pins.h"
 #include "config.h"
@@ -33,7 +34,6 @@ unsigned long autoReadingsIntervalMs = 300000;  // 5 minutos
 
 int soilDryAdc = 3500;
 int soilWetAdc = 1200;
-int soilAlertPercent = 75;
 int tempAlertThreshold = 35;
 int rhAlertThreshold = 85;
 int mqAlertThreshold = 300;
@@ -44,9 +44,6 @@ int fanPercent = 0;
 
 std::vector<String> authorizedChatIds;
 
-WiFiServer telnetServer(23);
-WiFiClient telnetClient;
-
 bool telegramEnabled = false;
 
 WiFiClientSecure telegramClient;
@@ -54,6 +51,7 @@ UniversalTelegramBot *telegramBot = nullptr;
 RTC_DS3231 rtc;
 bool rtcReady = false;
 String lastTelegramChatId;
+DHT dht(PIN_DHT, DHT22);
 
 // Configuración de zona horaria (por defecto UTC-5, sin horario de verano).
 // En la especificación POSIX el valor numérico representa las horas al oeste
@@ -108,6 +106,12 @@ String formatDateTime(const struct tm &timeinfo) {
   return String(buffer);
 }
 
+bool readAmbient(float &tempC, float &humidity) {
+  tempC = dht.readTemperature();
+  humidity = dht.readHumidity();
+  return !isnan(tempC) && !isnan(humidity);
+}
+
 String promptOrStoredValue(const char *label, const String &storedValue, uint32_t timeoutMs) {
   while (true) {
     Serial.println();
@@ -157,19 +161,49 @@ plantStage stageFromString(const String &value) {
   return getCurrentStage();
 }
 
+String stageToString(plantStage stage) {
+  switch (stage) {
+    case PLANTULA:
+      return "Plántula";
+    case VEGETATIVO:
+      return "Vegetativo";
+    case PRE_FLORACION:
+      return "Pre-floración";
+    case FLORACION:
+      return "Floración";
+    case FINAL:
+      return "Final";
+    default:
+      return "N/D";
+  }
+}
+
+String formatLastIrrigation() {
+  const unsigned long lastEpoch = getLastIrrigationEpoch();
+  if (lastEpoch == 0) {
+    return "Sin registro";
+  }
+
+  struct tm timeinfo;
+  time_t ts = static_cast<time_t>(lastEpoch);
+  if (localtime_r(&ts, &timeinfo) == nullptr) {
+    return "Sin registro";
+  }
+
+  return formatDateTime(timeinfo);
+}
+
 String formatIrrigationConfig() {
   String msg;
-  msg += "=========== CONFIGURACIÓN RIEGO ===========\n";
-  msg += "Etapa actual: " + String(static_cast<int>(getCurrentStage())) + "\n";
-  msg += "mL/L Plántula: " + String(getMlPerLiterForStage(PLANTULA)) + "\n";
-  msg += "mL/L Vegetativo: " + String(getMlPerLiterForStage(VEGETATIVO)) + "\n";
-  msg += "mL/L Pre-floración: " + String(getMlPerLiterForStage(PRE_FLORACION)) + "\n";
-  msg += "mL/L Floración: " + String(getMlPerLiterForStage(FLORACION)) + "\n";
-  msg += "mL/L Final: " + String(getMlPerLiterForStage(FINAL)) + "\n";
-  msg += "Volumen maceta (L): " + String(getPotVolumeL()) + "\n";
-  msg += "Caudal bomba (mL/s): " + String(getPumpFlow()) + "\n";
-  msg += "Umbral humedad suelo: " + String(getSoilThreshold()) + "\n";
-  msg += "===========================================";
+  msg += "Configuración del invernadero\n";
+  msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
+  msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
+  msg += "Último riego: " + formatLastIrrigation() + "\n";
+  msg += "Maceta: " + String(getPotVolumeL(), 1) + " L\n";
+  msg += "Bomba: " + String(getPumpFlow(), 1) + " mL/s\n";
+  msg += "Umbral suelo: " + String(getSoilThreshold()) + "%\n";
+  msg += "Umbral humedad alta: " + String(getSoilHighThreshold()) + "%\n";
+  msg += "Intervalo mínimo entre riegos: " + String(getIrrigationIntervalDays()) + " días";
   return msg;
 }
 
@@ -188,23 +222,28 @@ String formatStatus() {
     nowStr = formatDateTime(timeinfo);
   }
 
+  float ambientTemp = NAN;
+  float ambientRh = NAN;
+  bool ambientOk = readAmbient(ambientTemp, ambientRh);
+
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
   String msg;
-  msg += "===== STATUS ACTUAL =====\n";
-  msg += "Hora: " + nowStr + "\n";
-  msg += "Etapa: " + String(static_cast<int>(getCurrentStage())) + "\n";
+  msg += "Estado del invernadero\n";
+  msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
+  if (ambientOk) {
+    msg += "Temperatura y humedad: " + String(ambientTemp, 1) + "°C, " + String(ambientRh, 0) + "%\n";
+  } else {
+    msg += "Temperatura y humedad: N/D\n";
+  }
   msg += "Humedad suelo: " + String(soilPercent) + "% (ADC " + String(soilAdc) + ")\n";
-  msg += "Alerta suelo alta: " + String(soilAlertPercent) + "%\n";
-  msg += "Volumen maceta: " + String(getPotVolumeL()) + " L\n";
-  msg += "Caudal bomba: " + String(getPumpFlow()) + " mL/s\n";
-  msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
+  msg += "Último riego: " + formatLastIrrigation() + "\n";
+  msg += "Hora: " + nowStr + "\n";
   msg += "Riego automático: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF") + "\n";
-  msg += "Autolecturas: " + String(autoReadingsEnabled ? "ON" : "OFF") + " cada " + String(autoReadingsIntervalMs / 60000) + " min\n";
+  msg += "Autolecturas: " + String(autoReadingsEnabled ? "ON" : "OFF") + (autoReadingsEnabled ? " cada " + String(autoReadingsIntervalMs / 60000) + " min" : "") + "\n";
   msg += "Ventilador: " + String(fanAuto ? "AUTO" : "MANUAL") + (fanAuto ? "" : " " + String(fanPercent) + "%") + "\n";
   msg += "Alertas: " + String(alertsEnabled ? "ON" : "OFF") + "\n";
-  msg += "Ciclo de luz: N/D\n";
-  msg += "==========================";
+  msg += "Ciclo de luz: N/D";
   return msg;
 }
 
@@ -291,13 +330,30 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       updated = true;
       return "Caudal de bomba actualizado: " + String(flow);
     }
+  } else if (lower.startsWith("soilmax")) {
+    int spaceIndex = lower.indexOf(' ');
+    if (spaceIndex > 0) {
+      int threshold = constrain(lower.substring(spaceIndex + 1).toInt(), 0, 100);
+      setSoilHighThreshold(threshold);
+      updated = true;
+      return "Umbral de humedad alta actualizado: " + String(threshold) + "%";
+    }
   } else if (lower.startsWith("soil")) {
     int spaceIndex = lower.indexOf(' ');
     if (spaceIndex > 0) {
-      int threshold = lower.substring(spaceIndex + 1).toInt();
+      int threshold = constrain(lower.substring(spaceIndex + 1).toInt(), 0, 100);
       setSoilThreshold(threshold);
       updated = true;
-      return "Umbral de suelo actualizado: " + String(threshold);
+      return "Umbral de suelo actualizado: " + String(threshold) + "%";
+    }
+  } else if (lower.startsWith("interval")) {
+    int spaceIndex = lower.indexOf(' ');
+    if (spaceIndex > 0) {
+      long daysArg = lower.substring(spaceIndex + 1).toInt();
+      int days = (int)max(1L, daysArg);
+      setIrrigationIntervalDays(days);
+      updated = true;
+      return "Intervalo mínimo entre riegos actualizado a " + String(days) + " días";
     }
   } else if (lower == "reset") {
     configReset();
@@ -307,7 +363,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
     return formatIrrigationConfig();
   }
 
-  return "Comandos: stage <etapa>, ml <etapa> <valor>, pot <L>, flow <mL/s>, soil <adc>, reset, show";
+  return "Comandos: stage <etapa>, ml <etapa> <valor>, pot <L>, flow <mL/s>, soil <pct>, soilmax <pct>, interval <dias>, reset, show";
 }
 
 void handleSerialCommands() {
@@ -336,45 +392,8 @@ void broadcastMessage(const String &msg) {
 
   Serial.println(msg);
 
-  if (telnetClient && telnetClient.connected()) {
-    telnetClient.println(msg);
-  }
-
   if (telegramEnabled && WiFi.status() == WL_CONNECTED && telegramBot != nullptr && !lastTelegramChatId.isEmpty()) {
     telegramBot->sendMessage(lastTelegramChatId, msg, "");
-  }
-}
-
-void handleTelnetCommands() {
-  if (!telnetClient || !telnetClient.connected()) {
-    if (telnetClient) {
-      telnetClient.stop();
-    }
-
-    telnetClient = telnetServer.available();
-
-    if (telnetClient && telnetClient.connected()) {
-      telnetClient.println("Conectado al módulo de riego. Usa 'show' para ver la configuración.");
-    }
-  }
-
-  if (!telnetClient || !telnetClient.connected()) {
-    return;
-  }
-
-  while (telnetClient.available()) {
-    String line = telnetClient.readStringUntil('\n');
-    bool updated = false;
-    String response = handleIrrigationCommand(line, updated);
-
-    if (!response.isEmpty()) {
-      telnetClient.println(response);
-    }
-
-    if (updated) {
-      configSave();
-      telnetClient.println(formatIrrigationConfig());
-    }
   }
 }
 
@@ -388,7 +407,7 @@ String commandHelp() {
   String help;
   help += "Comandos disponibles:\n";
   help += "/start, /status, /maceta [L], /etapa [plantula|vegetativo|pre-floracion|floracion|final]\n";
-  help += "/cal_suelo [SECO] [HUMEDO], /alerta_suelo [%]\n";
+  help += "/cal_suelo [SECO] [HUMEDO], /alerta_suelo [%], /umbral_suelo [%], /intervalo_riego [dias]\n";
   help += "/alerta_temp_alta [C], /alerta_rh [%], /alerta_mq [N]\n";
   help += "/mostrar_conf_riego\n";
   help += "/calibrar [mL], /riego_auto [on|off], /regar [mL]\n";
@@ -448,8 +467,25 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   if (base == "/alerta_suelo") {
     int pct = args.toInt();
     if (pct <= 0) return "Uso: /alerta_suelo [%]";
-    soilAlertPercent = pct;
-    return "Alerta suelo alta fijada en " + String(pct) + "%";
+    setSoilHighThreshold(constrain(pct, 0, 100));
+    updatedConfig = true;
+    return "Umbral de humedad alta fijado en " + String(pct) + "%";
+  }
+
+  if (base == "/umbral_suelo") {
+    int pct = args.toInt();
+    if (pct <= 0) return "Uso: /umbral_suelo [%]";
+    setSoilThreshold(constrain(pct, 0, 100));
+    updatedConfig = true;
+    return "Umbral mínimo de humedad fijado en " + String(pct) + "%";
+  }
+
+  if (base == "/intervalo_riego") {
+    int days = args.toInt();
+    if (days <= 0) return "Uso: /intervalo_riego [dias]";
+    setIrrigationIntervalDays(max(1, days));
+    updatedConfig = true;
+    return "Intervalo entre riegos fijado en " + String(days) + " días";
   }
 
   if (base == "/alerta_temp_alta") {
@@ -853,6 +889,8 @@ void setup() {
     delay(10);
   }
 
+  dht.begin();
+
   configInit();
   configLoad();
   initIrrigationHardware();
@@ -882,8 +920,6 @@ void setup() {
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
   saveWifiCredentials(wifiSsid, wifiPassword);
-
-  telnetServer.begin();
 
   // -------------------------------------------------------
   //  SINCRONIZAR HORA NTP (IMPORTANTE PARA TLS)
@@ -942,8 +978,6 @@ void setup() {
     saveTelegramToken(telegramToken);
     Serial.println("Token verificado correctamente.");
     telegramEnabled = true;
-  } else {
-    Serial.println("Se habilitarán comandos por Telnet en caso de no tener Internet.");
   }
 
   Serial.println("Sistema listo.");
@@ -955,7 +989,6 @@ void setup() {
 // =========================================================
 void loop() {
   handleSerialCommands();
-  handleTelnetCommands();
   pollTelegram();
   sendPeriodicStatusIfNeeded();
 
