@@ -12,9 +12,12 @@ int mlVeg = 100; // Vegetativo
 int mlPre = 150; // Pre floración
 int mlFlo = 200; // Floración
 int mlFin = 120; // Final
-float potVolumeL = 10.0f;
+float potVolumeL = 15.0f;
 float pumpFlow = 50.0f;       // mL/s
-int soilThreshold = 2000;     // Valor ADC
+int soilThreshold = 35;       // Porcentaje mínimo antes de regar
+int soilHighThreshold = 65;   // Porcentaje máximo permitido
+int irrigationIntervalDays = 2;
+unsigned long lastIrrigationEpoch = 0;
 plantStage currentStage = PLANTULA;
 
 void ensurePrefs() {
@@ -60,7 +63,19 @@ void configLoad() {
   if (!irrigationPrefs.isKey("soilTh")) {
     irrigationPrefs.putInt("soilTh", soilThreshold);
   }
-  soilThreshold = irrigationPrefs.getInt("soilTh", soilThreshold);
+  soilThreshold = constrain(irrigationPrefs.getInt("soilTh", soilThreshold), 0, 100);
+
+  if (!irrigationPrefs.isKey("soilHigh")) {
+    irrigationPrefs.putInt("soilHigh", soilHighThreshold);
+  }
+  soilHighThreshold = constrain(irrigationPrefs.getInt("soilHigh", soilHighThreshold), 0, 100);
+
+  if (!irrigationPrefs.isKey("intDays")) {
+    irrigationPrefs.putInt("intDays", irrigationIntervalDays);
+  }
+  irrigationIntervalDays = max(irrigationPrefs.getInt("intDays", irrigationIntervalDays), 1);
+
+  lastIrrigationEpoch = irrigationPrefs.getULong("lastIr", lastIrrigationEpoch);
 
   if (!irrigationPrefs.isKey("stage")) {
     irrigationPrefs.putInt("stage", static_cast<int>(currentStage));
@@ -79,6 +94,9 @@ void configSave() {
   irrigationPrefs.putFloat("potL", potVolumeL);
   irrigationPrefs.putFloat("flow", pumpFlow);
   irrigationPrefs.putInt("soilTh", soilThreshold);
+  irrigationPrefs.putInt("soilHigh", soilHighThreshold);
+  irrigationPrefs.putInt("intDays", irrigationIntervalDays);
+  irrigationPrefs.putULong("lastIr", lastIrrigationEpoch);
   irrigationPrefs.putInt("stage", static_cast<int>(currentStage));
 }
 
@@ -88,9 +106,12 @@ void configReset() {
   mlPre = 150;
   mlFlo = 200;
   mlFin = 120;
-  potVolumeL = 10.0f;
+  potVolumeL = 15.0f;
   pumpFlow = 50.0f;
-  soilThreshold = 2000;
+  soilThreshold = 35;
+  soilHighThreshold = 65;
+  irrigationIntervalDays = 2;
+  lastIrrigationEpoch = 0;
   currentStage = PLANTULA;
   configSave();
 }
@@ -117,6 +138,12 @@ float getPotVolumeL() { return potVolumeL; }
 float getPumpFlow() { return pumpFlow; }
 
 int getSoilThreshold() { return soilThreshold; }
+
+int getSoilHighThreshold() { return soilHighThreshold; }
+
+int getIrrigationIntervalDays() { return irrigationIntervalDays; }
+
+unsigned long getLastIrrigationEpoch() { return lastIrrigationEpoch; }
 
 plantStage getCurrentStage() { return currentStage; }
 
@@ -167,7 +194,25 @@ void setPumpFlow(float mlPerSecond) {
 }
 
 void setSoilThreshold(int threshold) {
-  soilThreshold = threshold;
+  soilThreshold = constrain(threshold, 0, 100);
   ensurePrefs();
   irrigationPrefs.putInt("soilTh", soilThreshold);
+}
+
+void setSoilHighThreshold(int threshold) {
+  soilHighThreshold = constrain(threshold, 0, 100);
+  ensurePrefs();
+  irrigationPrefs.putInt("soilHigh", soilHighThreshold);
+}
+
+void setIrrigationIntervalDays(int days) {
+  irrigationIntervalDays = max(days, 1);
+  ensurePrefs();
+  irrigationPrefs.putInt("intDays", irrigationIntervalDays);
+}
+
+void setLastIrrigationEpoch(unsigned long epochSeconds) {
+  lastIrrigationEpoch = epochSeconds;
+  ensurePrefs();
+  irrigationPrefs.putULong("lastIr", lastIrrigationEpoch);
 }
