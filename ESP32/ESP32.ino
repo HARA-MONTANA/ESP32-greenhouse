@@ -5,6 +5,7 @@
 #include <RTClib.h>
 #include <sys/time.h>
 #include <time.h>
+#include <Preferences.h>
 
 #include "pins.h"
 
@@ -14,6 +15,11 @@
 String wifiSsid;
 String wifiPassword;
 String telegramToken;
+String storedWifiSsid;
+String storedWifiPassword;
+String storedTelegramToken;
+
+Preferences credentialsStore;
 
 WiFiClientSecure telegramClient;
 UniversalTelegramBot *telegramBot = nullptr;
@@ -29,11 +35,18 @@ const char *TZ_INFO = "GMT5";
 // =========================================================
 //  FUNCIONES DE UTILIDAD
 // =========================================================
-String readLineFromSerial(const char *prompt) {
+String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
   Serial.print(prompt);
   Serial.flush();
 
+  unsigned long start = millis();
+
   while (!Serial.available()) {
+    if (timeoutMs > 0 && millis() - start >= timeoutMs) {
+      Serial.println();
+      return "";
+    }
+
     delay(20);
   }
 
@@ -42,37 +55,61 @@ String readLineFromSerial(const char *prompt) {
   return line;
 }
 
+String promptOrStoredValue(const char *label, const String &storedValue, uint32_t timeoutMs) {
+  while (true) {
+    Serial.println();
+    Serial.print(label);
+
+    if (!storedValue.isEmpty()) {
+      Serial.print(" (presiona Enter para usar el valor guardado)");
+    }
+
+    Serial.println();
+    String value = readLineFromSerial("> ", timeoutMs);
+
+    if (value.isEmpty()) {
+      if (!storedValue.isEmpty()) {
+        Serial.println("Usando valor almacenado en NVS.");
+        return storedValue;
+      }
+
+      Serial.println("No hay un valor almacenado, ingresa un dato válido.");
+      continue;
+    }
+
+    return value;
+  }
+}
+
+void loadStoredCredentials() {
+  credentialsStore.begin("cred", false);
+  storedWifiSsid = credentialsStore.getString("ssid", "");
+  storedWifiPassword = credentialsStore.getString("pass", "");
+  storedTelegramToken = credentialsStore.getString("token", "");
+}
+
+void saveWifiCredentials(const String &ssid, const String &password) {
+  credentialsStore.putString("ssid", ssid);
+  credentialsStore.putString("pass", password);
+  storedWifiSsid = ssid;
+  storedWifiPassword = password;
+}
+
+void saveTelegramToken(const String &token) {
+  credentialsStore.putString("token", token);
+  storedTelegramToken = token;
+}
+
 
 // =========================================================
 //  SOLICITAR CREDENCIALES
 // =========================================================
 void requestCredentials() {
-  do {
-    Serial.println();
-    Serial.println("WiFi SSID:");
-    wifiSsid = readLineFromSerial("> ");
-    if (wifiSsid.isEmpty()) {
-      Serial.println("El SSID no puede estar vacío.");
-    }
-  } while (wifiSsid.isEmpty());
+  const uint32_t promptTimeoutMs = 60000;  // 1 minuto para cada valor
 
-  do {
-    Serial.println();
-    Serial.println("WiFi Password:");
-    wifiPassword = readLineFromSerial("> ");
-    if (wifiPassword.isEmpty()) {
-      Serial.println("La contraseña no puede estar vacía.");
-    }
-  } while (wifiPassword.isEmpty());
-
-  do {
-    Serial.println();
-    Serial.println("Token Telegram:");
-    telegramToken = readLineFromSerial("> ");
-    if (telegramToken.isEmpty()) {
-      Serial.println("El token no puede estar vacío.");
-    }
-  } while (telegramToken.isEmpty());
+  wifiSsid = promptOrStoredValue("WiFi SSID:", storedWifiSsid, promptTimeoutMs);
+  wifiPassword = promptOrStoredValue("WiFi Password:", storedWifiPassword, promptTimeoutMs);
+  telegramToken = promptOrStoredValue("Token Telegram:", storedTelegramToken, promptTimeoutMs);
 
   Serial.println();
   Serial.println("=========== CONFIGURACIÓN INICIAL ===========");
@@ -223,6 +260,7 @@ void setup() {
   configureTimezone();
   rtcReady = initRtc();
 
+  loadStoredCredentials();
   requestCredentials();
 
   // -------------------------------------------------------
@@ -240,6 +278,7 @@ void setup() {
   Serial.println("WiFi conectado.");
   Serial.print("IP: ");
   Serial.println(WiFi.localIP());
+  saveWifiCredentials(wifiSsid, wifiPassword);
 
   // -------------------------------------------------------
   //  SINCRONIZAR HORA NTP (IMPORTANTE PARA TLS)
@@ -295,6 +334,7 @@ void setup() {
   }
 
   if (tokenVerificado) {
+    saveTelegramToken(telegramToken);
     Serial.println("Token verificado correctamente.");
   }
 
