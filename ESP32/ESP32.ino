@@ -45,34 +45,41 @@ String readLineFromSerial(const char *prompt) {
 // =========================================================
 void requestCredentials() {
   do {
-    Serial.println();
-    Serial.println("WiFi SSID:");
-    wifiSsid = readLineFromSerial("> ");
+    Serial.print("WiFi SSID: ");
+    wifiSsid = readLineFromSerial("");
     if (wifiSsid.isEmpty()) {
       Serial.println("El SSID no puede estar vacío.");
+    } else {
+      Serial.print("Ingresaste: ");
+      Serial.println(wifiSsid);
+      Serial.println();
     }
   } while (wifiSsid.isEmpty());
 
   do {
-    Serial.println();
-    Serial.println("WiFi Password:");
-    wifiPassword = readLineFromSerial("> ");
+    Serial.print("WiFi Password: ");
+    wifiPassword = readLineFromSerial("");
     if (wifiPassword.isEmpty()) {
       Serial.println("La contraseña no puede estar vacía.");
+    } else {
+      Serial.print("Ingresaste: ");
+      Serial.println(wifiPassword);
+      Serial.println();
     }
   } while (wifiPassword.isEmpty());
 
   do {
-    Serial.println();
-    Serial.println("Token Telegram:");
-    telegramToken = readLineFromSerial("> ");
+    Serial.print("Token Telegram: ");
+    telegramToken = readLineFromSerial("");
     if (telegramToken.isEmpty()) {
       Serial.println("El token no puede estar vacío.");
+    } else {
+      Serial.print("Ingresaste: ");
+      Serial.println(telegramToken);
+      Serial.println();
     }
   } while (telegramToken.isEmpty());
 
-  Serial.println();
-  Serial.println("=========== CONFIGURACIÓN INICIAL ===========");
   Serial.print("WiFi SSID: ");
   Serial.println(wifiSsid);
   Serial.print("WiFi Password: ");
