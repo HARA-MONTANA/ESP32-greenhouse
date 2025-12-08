@@ -44,9 +44,6 @@ String readLineFromSerial(const char *prompt) {
 //  SOLICITAR CREDENCIALES
 // =========================================================
 void requestCredentials() {
-  Serial.println();
-  Serial.println("=========== CONFIGURACIÓN INICIAL ===========");
-
   do {
     Serial.print("WiFi SSID: ");
     wifiSsid = readLineFromSerial("");
@@ -91,6 +88,7 @@ void requestCredentials() {
   Serial.println(telegramToken);
   Serial.println();
   Serial.println("Credenciales recibidas.");
+  Serial.println("==============================================");
 }
 
 
