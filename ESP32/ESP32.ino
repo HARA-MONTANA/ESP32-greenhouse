@@ -39,20 +39,34 @@ String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
   Serial.print(prompt);
   Serial.flush();
 
+  String line;
   unsigned long start = millis();
 
-  while (!Serial.available()) {
-    if (timeoutMs > 0 && millis() - start >= timeoutMs) {
-      Serial.println();
-      return "";
+  while (true) {
+    // Esperar a que llegue al menos un carácter o a que venza el timeout.
+    while (!Serial.available()) {
+      if (timeoutMs > 0 && millis() - start >= timeoutMs) {
+        Serial.println();
+        return "";
+      }
+
+      delay(20);
     }
 
-    delay(20);
-  }
+    // Leer carácter a carácter para aceptar tanto '\n' como '\r'.
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') {
+      // Consumir el segundo carácter de fin de línea si llega como \r\n.
+      if (Serial.peek() == '\n' || Serial.peek() == '\r') {
+        Serial.read();
+      }
 
-  String line = Serial.readStringUntil('\n');
-  line.trim();
-  return line;
+      line.trim();
+      return line;
+    }
+
+    line += c;
+  }
 }
 
 String formatDateTime(const struct tm &timeinfo) {
