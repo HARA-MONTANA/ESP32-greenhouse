@@ -55,6 +55,12 @@ String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
   return line;
 }
 
+String formatDateTime(const struct tm &timeinfo) {
+  char buffer[20];
+  strftime(buffer, sizeof(buffer), "%d/%m/%Y %H:%M:%S", &timeinfo);
+  return String(buffer);
+}
+
 String promptOrStoredValue(const char *label, const String &storedValue, uint32_t timeoutMs) {
   while (true) {
     Serial.println();
@@ -183,7 +189,7 @@ bool setTimeFromRtc() {
   if (getLocalTime(&timeinfo)) {
     Serial.println("Hora configurada desde el RTC.");
     Serial.print("Hora local: ");
-    Serial.println(asctime(&timeinfo));
+    Serial.println(formatDateTime(timeinfo));
     return true;
   }
 
@@ -205,7 +211,7 @@ bool syncTimeGMT5(unsigned long maxWaitMs = 60000) {
       Serial.println();
       Serial.println("Hora NTP sincronizada.");
       Serial.print("Hora local: ");
-      Serial.println(asctime(&timeinfo));
+      Serial.println(formatDateTime(timeinfo));
       return true;
     }
 
