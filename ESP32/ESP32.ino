@@ -230,7 +230,9 @@ String formatLastIrrigation() {
     return "Sin registro";
   }
 
-  return formatDateTime(timeinfo);
+  char buffer[20];
+  strftime(buffer, sizeof(buffer), "%H:%M %d/%m/%Y", &timeinfo);
+  return String(buffer);
 }
 
 String formatIrrigationConfig() {
@@ -282,16 +284,16 @@ String formatStatus() {
     msg += "T/H: N/D\n";
   }
   msg += "Suelo: " + String(soilPercent) + "% (" + String(soilAdc) + ")\n";
-  msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") + "\n";
+  msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") +
+         " | mL/L: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
-  msg += "mL/L: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
+  msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
   msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL");
   msg += " | FAN: " + String(fanAuto ? "AUTO" : "MANUAL " + String(fanPercent) + "%") + "\n";
   msg += "Alerts: " + String(alertsEnabled ? "ON" : "OFF") + " | AutoLect: ";
   msg +=
       autoReadingsEnabled ? String(autoReadingsIntervalMs / 60000) + " min\n" : String("OFF\n");
-  msg += "Últ.riego: " + formatLastIrrigation() + "\n";
-  msg += "Hora local: " + nowStr;
+  msg += "Hora loca: " + nowStr;
   return msg;
 }
 
