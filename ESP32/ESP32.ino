@@ -286,8 +286,8 @@ String formatStatus() {
   msg += "Suelo: " + String(soilPercent) + "% (" + String(soilAdc) + ")\n";
   msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") +
          " | mL/L: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
-  msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
+  msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
   msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL");
   msg += " | FAN: " + String(fanAuto ? "AUTO" : "MANUAL " + String(fanPercent) + "%") + "\n";
   msg += "Alerts: " + String(alertsEnabled ? "ON" : "OFF") + " | AutoLect: ";
