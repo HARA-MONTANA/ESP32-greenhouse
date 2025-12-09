@@ -286,7 +286,7 @@ String formatStatus() {
   }
   msg += "Suelo: " + String(soilPercent) + "% (" + String(soilAdc) + ")\n";
   msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") +
-         " | Riego etapa: " + String(stageMl, 1) + " mL\n";
+         " | mL: " + String(stageMl, 1) + "\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
   msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL");
