@@ -32,8 +32,8 @@ bool alertsEnabled = true;
 bool autoReadingsEnabled = false;
 unsigned long autoReadingsIntervalMs = 300000;  // 5 minutos
 
-int soilDryAdc = 500;
-int soilWetAdc = 2150;
+int soilDryAdc = 2150;
+int soilWetAdc = 500;
 int tempAlertThreshold = 35;
 int rhAlertThreshold = 85;
 int mqAlertThreshold = 300;
