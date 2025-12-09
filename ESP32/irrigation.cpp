@@ -25,6 +25,11 @@ bool checkSoilAndIrrigate() {
   const int soilReading = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilReading);
 
+  if (!isPumpCalibrated()) {
+    broadcastMessage("Riego omitido: bomba sin calibrar.");
+    return false;
+  }
+
   if (!autoIrrigationEnabled) {
     return false;
   }
@@ -60,7 +65,6 @@ void irrigate(int initialSoilReading) {
   plantStage stage = getCurrentStage();
   const int mlPerLiter = getMlPerLiterForStage(stage);
   const float potL = getPotVolumeL();
-  const float pumpFlow = getPumpFlow();
 
   const float totalMl = mlPerLiter * potL;
   irrigateVolume(totalMl, initialSoilReading);
@@ -69,6 +73,12 @@ void irrigate(int initialSoilReading) {
 void irrigateVolume(float totalMl, int initialSoilReading) {
   plantStage stage = getCurrentStage();
   const float pumpFlow = getPumpFlow();
+
+  if (!isPumpCalibrated()) {
+    broadcastMessage("Riego omitido: calibra la bomba para calcular el caudal.");
+    return;
+  }
+
   const int initialAdc = initialSoilReading >= 0 ? initialSoilReading : readSoilMoisture();
   const int initialPercent = soilPercentFromAdc(initialAdc);
   float pumpTimeMs = 0.0f;
