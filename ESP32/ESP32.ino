@@ -281,18 +281,15 @@ String formatStatus() {
   String msg;
   msg += "==GH==\n";
   if (ambientOk) {
-    msg += "T/H: " + String(ambientTemp, 1) + "°C | " + String(ambientRh, 0) + "%\n";
+    msg += "T|H: " + String(ambientTemp, 1) + "°C | " + String(ambientRh, 0) + "%\n";
   } else {
-    msg += "T/H: N/D\n";
+    msg += "T|H: N/D\n";
   }
-  msg += "Suelo: " + String(soilPercent) + "% (" + String(soilAdc) + ") | PWM: " +
-         String(fanPercent) + "%\n";
-  msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") + " | mL: " + String(stageMl, 1) +
-         "\n";
+  msg += "Suelo|PWM: " + String(soilPercent) + "% (" + String(soilAdc) + ") | " + String(fanPercent) + "%\n";
+  msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") + " | mL: " + String(stageMl, 1) + "\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
-  msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") +
-         " | FAN: " + String(fanAuto ? "AUTO" : "MANUAL") + "\n";
+  msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") + " | FAN: " + String(fanAuto ? "AUTO" : "MANUAL") + "\n";
   msg += "Alerts: " + String(alertsEnabled ? "ON" : "OFF") + " | AutoLect: ";
   msg +=
       autoReadingsEnabled ? String(autoReadingsIntervalMs / 60000) + " min\n" : String("OFF\n");
