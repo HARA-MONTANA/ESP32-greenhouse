@@ -236,6 +236,12 @@ String formatLastIrrigation() {
 }
 
 String formatIrrigationConfig() {
+  struct tm timeinfo;
+  String nowStr = "Sin hora";
+  if (getLocalTime(&timeinfo)) {
+    nowStr = formatDateTime(timeinfo);
+  }
+
   String msg;
   msg += "====Configuración del invernadero====\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
@@ -249,7 +255,8 @@ String formatIrrigationConfig() {
   }
   msg += "Umbral suelo: " + String(getSoilThreshold()) + "%\n";
   msg += "Umbral humedad alta: " + String(getSoilHighThreshold()) + "%\n";
-  msg += "Intervalo mínimo entre riegos: " + String(getIrrigationIntervalDays()) + " días";
+  msg += "Intervalo mínimo entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
+  msg += "Hora local: " + nowStr;
   return msg;
 }
 
@@ -264,18 +271,13 @@ int soilPercentFromAdc(int reading) {
 }
 
 String formatStatus() {
-  struct tm timeinfo;
-  String nowStr = "Sin hora";
-  if (getLocalTime(&timeinfo)) {
-    nowStr = formatDateTime(timeinfo);
-  }
-
   float ambientTemp = NAN;
   float ambientRh = NAN;
   bool ambientOk = readAmbient(ambientTemp, ambientRh);
 
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
+  const float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
   String msg;
   msg += "==GH==\n";
   if (ambientOk) {
@@ -283,17 +285,17 @@ String formatStatus() {
   } else {
     msg += "T/H: N/D\n";
   }
-  msg += "Suelo: " + String(soilPercent) + "% (" + String(soilAdc) + ")\n";
-  msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") +
-         " | mL/L: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
+  msg += "Suelo: " + String(soilPercent) + "% (" + String(soilAdc) + ") | PWM: " +
+         String(fanPercent) + "%\n";
+  msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") + " | mL: " + String(stageMl, 1) +
+         "\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
-  msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL");
-  msg += " | FAN: " + String(fanAuto ? "AUTO" : "MANUAL " + String(fanPercent) + "%") + "\n";
+  msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") +
+         " | FAN: " + String(fanAuto ? "AUTO" : "MANUAL") + "\n";
   msg += "Alerts: " + String(alertsEnabled ? "ON" : "OFF") + " | AutoLect: ";
   msg +=
       autoReadingsEnabled ? String(autoReadingsIntervalMs / 60000) + " min\n" : String("OFF\n");
-  msg += "Hora local: " + nowStr;
   return msg;
 }
 
