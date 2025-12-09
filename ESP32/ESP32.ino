@@ -276,6 +276,7 @@ String formatStatus() {
 
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
+  const float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
   String msg;
   msg += "==GH==\n";
   if (ambientOk) {
@@ -285,7 +286,7 @@ String formatStatus() {
   }
   msg += "Suelo: " + String(soilPercent) + "% (" + String(soilAdc) + ")\n";
   msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") +
-         " | mL/L: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
+         " | Riego etapa: " + String(stageMl, 1) + " mL\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
   msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL");
