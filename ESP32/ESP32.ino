@@ -69,6 +69,10 @@ String lastTelegramChatIdSent;
 String timezoneInfo = "GMT5";
 int timezoneOffsetHours = -5;
 
+// Declaraciones anticipadas para funciones definidas más adelante.
+bool syncTimeWithOffset(int offsetHours = -5, unsigned long maxWaitMs = 60000);
+bool verifyTelegramToken(uint8_t maxAttempts = 5, uint16_t retryDelayMs = 1000);
+
 
 // =========================================================
 //  FUNCIONES DE UTILIDAD
@@ -980,7 +984,7 @@ bool setTimeFromRtc() {
   return false;
 }
 
-bool syncTimeWithOffset(int offsetHours = -5, unsigned long maxWaitMs = 60000) {
+bool syncTimeWithOffset(int offsetHours, unsigned long maxWaitMs) {
   timezoneInfo = tzFromOffset(offsetHours);
   configureTimezone();
   Serial.println("Sincronizando hora NTP (" + timezoneInfo + ")...");
@@ -1012,7 +1016,7 @@ bool syncTimeWithOffset(int offsetHours = -5, unsigned long maxWaitMs = 60000) {
 // =========================================================
 //  VERIFICAR TOKEN DE TELEGRAM
 // =========================================================
-bool verifyTelegramToken(uint8_t maxAttempts = 5, uint16_t retryDelayMs = 1000) {
+bool verifyTelegramToken(uint8_t maxAttempts, uint16_t retryDelayMs) {
   if (telegramBot == nullptr) {
     return false;
   }
