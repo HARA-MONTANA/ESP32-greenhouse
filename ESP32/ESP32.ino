@@ -291,7 +291,7 @@ String formatStatus() {
   msg +=
       autoReadingsEnabled ? String(autoReadingsIntervalMs / 60000) + " min\n" : String("OFF\n");
   msg += "Últ.riego: " + formatLastIrrigation() + "\n";
-  msg += "Hora loca: " + nowStr;
+  msg += "Hora local: " + nowStr;
   return msg;
 }
 
