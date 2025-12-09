@@ -257,7 +257,7 @@ String formatStatus() {
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
   String msg;
-  msg += "Estado del invernadero\n";
+  msg += "====Estado del invernadero====\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   if (ambientOk) {
     msg += "Temp y humedad: " + String(ambientTemp, 1) + "°C | " + String(ambientRh, 0) + "%\n";
