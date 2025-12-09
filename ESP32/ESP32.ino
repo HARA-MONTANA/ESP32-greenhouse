@@ -293,7 +293,7 @@ String formatStatus() {
   msg += "Alerts: " + String(alertsEnabled ? "ON" : "OFF") + " | AutoLect: ";
   msg +=
       autoReadingsEnabled ? String(autoReadingsIntervalMs / 60000) + " min\n" : String("OFF\n");
-  msg += "Hora loca: " + nowStr;
+  msg += "Hora local: " + nowStr;
   return msg;
 }
 
