@@ -26,11 +26,11 @@ unsigned long getLastIrrigationEpoch();
 plantStage getCurrentStage();
 void updateStage(plantStage newStage);
 
-void setMlPerLiterForStage(plantStage stage, int value);
-void setPotVolumeL(float liters);
-void setPumpFlow(float mlPerSecond);
+bool setMlPerLiterForStage(plantStage stage, int value);
+bool setPotVolumeL(float liters);
+bool setPumpFlow(float mlPerSecond);
 void setPumpCalibrated(bool calibrated);
-void setSoilThreshold(int threshold);
-void setSoilHighThreshold(int threshold);
-void setIrrigationIntervalDays(int days);
+bool setSoilThreshold(int threshold);
+bool setSoilHighThreshold(int threshold);
+bool setIrrigationIntervalDays(int days);
 void setLastIrrigationEpoch(unsigned long epochSeconds);

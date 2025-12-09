@@ -346,7 +346,9 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       String valueToken = lower.substring(secondSpace + 1);
       plantStage stage = stageFromString(stageToken);
       int value = valueToken.toInt();
-      setMlPerLiterForStage(stage, value);
+      if (!setMlPerLiterForStage(stage, value)) {
+        return "Valor mL/L fuera de rango (5-200).";
+      }
       updated = true;
       return "mL/L actualizado para etapa " + stageToken + ": " + String(value);
     }
@@ -354,7 +356,9 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
     int spaceIndex = lower.indexOf(' ');
     if (spaceIndex > 0) {
       float liters = lower.substring(spaceIndex + 1).toFloat();
-      setPotVolumeL(liters);
+      if (!setPotVolumeL(liters)) {
+        return "Capacidad de maceta fuera de rango (1-50 L).";
+      }
       updated = true;
       return "Volumen de maceta actualizado: " + String(liters);
     }
@@ -362,32 +366,39 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
     int spaceIndex = lower.indexOf(' ');
     if (spaceIndex > 0) {
       float flow = lower.substring(spaceIndex + 1).toFloat();
-      setPumpFlow(flow);
+      if (!setPumpFlow(flow)) {
+        return "Caudal inválido (1-50 mL/s).";
+      }
       updated = true;
       return "Caudal de bomba actualizado: " + String(flow);
     }
   } else if (lower.startsWith("soilmax")) {
     int spaceIndex = lower.indexOf(' ');
     if (spaceIndex > 0) {
-      int threshold = constrain(lower.substring(spaceIndex + 1).toInt(), 0, 100);
-      setSoilHighThreshold(threshold);
+      int threshold = lower.substring(spaceIndex + 1).toInt();
+      if (!setSoilHighThreshold(threshold)) {
+        return "Umbral de humedad alta fuera de rango (50-100%).";
+      }
       updated = true;
       return "Umbral de humedad alta actualizado: " + String(threshold) + "%";
     }
   } else if (lower.startsWith("soil")) {
     int spaceIndex = lower.indexOf(' ');
     if (spaceIndex > 0) {
-      int threshold = constrain(lower.substring(spaceIndex + 1).toInt(), 0, 100);
-      setSoilThreshold(threshold);
+      int threshold = lower.substring(spaceIndex + 1).toInt();
+      if (!setSoilThreshold(threshold)) {
+        return "Umbral de suelo fuera de rango (0-50%).";
+      }
       updated = true;
       return "Umbral de suelo actualizado: " + String(threshold) + "%";
     }
   } else if (lower.startsWith("interval")) {
     int spaceIndex = lower.indexOf(' ');
     if (spaceIndex > 0) {
-      long daysArg = lower.substring(spaceIndex + 1).toInt();
-      int days = (int)max(1L, daysArg);
-      setIrrigationIntervalDays(days);
+      int days = lower.substring(spaceIndex + 1).toInt();
+      if (!setIrrigationIntervalDays(days)) {
+        return "Intervalo de riego fuera de rango (1-5 días).";
+      }
       updated = true;
       return "Intervalo mínimo entre riegos actualizado a " + String(days) + " días";
     }
@@ -480,7 +491,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   if (base == "/maceta") {
     float liters = args.toFloat();
     if (liters <= 0) return "Uso: /maceta [litros]";
-    setPotVolumeL(liters);
+    if (!setPotVolumeL(liters)) return "Capacidad inválida (1-50 L).";
     updatedConfig = true;
     return "Capacidad de maceta actualizada a " + String(liters) + " L";
   }
@@ -503,7 +514,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   if (base == "/alerta_suelo") {
     int pct = args.toInt();
     if (pct <= 0) return "Uso: /alerta_suelo [%]";
-    setSoilHighThreshold(constrain(pct, 0, 100));
+    if (!setSoilHighThreshold(pct)) return "Umbral de humedad alta inválido (50-100%).";
     updatedConfig = true;
     return "Umbral de humedad alta fijado en " + String(pct) + "%";
   }
@@ -511,7 +522,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   if (base == "/umbral_suelo") {
     int pct = args.toInt();
     if (pct <= 0) return "Uso: /umbral_suelo [%]";
-    setSoilThreshold(constrain(pct, 0, 100));
+    if (!setSoilThreshold(pct)) return "Umbral de suelo inválido (0-50%).";
     updatedConfig = true;
     return "Umbral mínimo de humedad fijado en " + String(pct) + "%";
   }
@@ -519,7 +530,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   if (base == "/intervalo_riego") {
     int days = args.toInt();
     if (days <= 0) return "Uso: /intervalo_riego [dias]";
-    setIrrigationIntervalDays(max(1, days));
+    if (!setIrrigationIntervalDays(days)) return "Intervalo entre riegos inválido (1-5 días).";
     updatedConfig = true;
     return "Intervalo entre riegos fijado en " + String(days) + " días";
   }
@@ -561,7 +572,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     float measuredMl = args.toFloat();
     if (measuredMl <= 0) return "Envía el volumen medido en mL.";
     float newFlow = measuredMl / 5.0f;
-    setPumpFlow(newFlow);
+    if (!setPumpFlow(newFlow)) return "Caudal calculado fuera de rango (1-50 mL/s).";
     updatedConfig = true;
     awaitingCalibrationVolume = false;
     return "Caudal calculado: " + String(newFlow) + " mL/s";
