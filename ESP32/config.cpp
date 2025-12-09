@@ -13,8 +13,9 @@ int mlPre = 150; // Pre floración
 int mlFlo = 200; // Floración
 int mlFin = 120; // Final
 float potVolumeL = 15.0f;
-float pumpFlow = 50.0f;       // mL/s
-int soilThreshold = 35;       // Porcentaje mínimo antes de regar
+float pumpFlow = 0.0f;        // mL/s
+bool pumpCalibrated = false;
+int soilThreshold = 20;       // Porcentaje mínimo antes de regar
 int soilHighThreshold = 65;   // Porcentaje máximo permitido
 int irrigationIntervalDays = 2;
 unsigned long lastIrrigationEpoch = 0;
@@ -60,6 +61,12 @@ void configLoad() {
   }
   pumpFlow = irrigationPrefs.getFloat("flow", pumpFlow);
 
+  if (irrigationPrefs.isKey("flowCal")) {
+    pumpCalibrated = irrigationPrefs.getBool("flowCal", pumpCalibrated);
+  } else {
+    pumpCalibrated = irrigationPrefs.isKey("flow") && pumpFlow > 0.0f;
+  }
+
   if (!irrigationPrefs.isKey("soilTh")) {
     irrigationPrefs.putInt("soilTh", soilThreshold);
   }
@@ -93,6 +100,7 @@ void configSave() {
   irrigationPrefs.putInt("ml_fin", mlFin);
   irrigationPrefs.putFloat("potL", potVolumeL);
   irrigationPrefs.putFloat("flow", pumpFlow);
+  irrigationPrefs.putBool("flowCal", pumpCalibrated);
   irrigationPrefs.putInt("soilTh", soilThreshold);
   irrigationPrefs.putInt("soilHigh", soilHighThreshold);
   irrigationPrefs.putInt("intDays", irrigationIntervalDays);
@@ -107,8 +115,9 @@ void configReset() {
   mlFlo = 200;
   mlFin = 120;
   potVolumeL = 15.0f;
-  pumpFlow = 50.0f;
-  soilThreshold = 35;
+  pumpFlow = 0.0f;
+  pumpCalibrated = false;
+  soilThreshold = 20;
   soilHighThreshold = 65;
   irrigationIntervalDays = 2;
   lastIrrigationEpoch = 0;
@@ -136,6 +145,8 @@ int getMlPerLiterForStage(plantStage stage) {
 float getPotVolumeL() { return potVolumeL; }
 
 float getPumpFlow() { return pumpFlow; }
+
+bool isPumpCalibrated() { return pumpCalibrated; }
 
 int getSoilThreshold() { return soilThreshold; }
 
@@ -189,8 +200,15 @@ void setPotVolumeL(float liters) {
 
 void setPumpFlow(float mlPerSecond) {
   pumpFlow = mlPerSecond;
+  setPumpCalibrated(pumpFlow > 0.0f);
   ensurePrefs();
   irrigationPrefs.putFloat("flow", pumpFlow);
+}
+
+void setPumpCalibrated(bool calibrated) {
+  pumpCalibrated = calibrated;
+  ensurePrefs();
+  irrigationPrefs.putBool("flowCal", pumpCalibrated);
 }
 
 void setSoilThreshold(int threshold) {

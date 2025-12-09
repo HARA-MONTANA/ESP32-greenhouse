@@ -32,8 +32,8 @@ bool alertsEnabled = true;
 bool autoReadingsEnabled = false;
 unsigned long autoReadingsIntervalMs = 300000;  // 5 minutos
 
-int soilDryAdc = 3500;
-int soilWetAdc = 1200;
+int soilDryAdc = 500;
+int soilWetAdc = 2150;
 int tempAlertThreshold = 35;
 int rhAlertThreshold = 85;
 int mqAlertThreshold = 300;
@@ -228,7 +228,11 @@ String formatIrrigationConfig() {
   msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
   msg += "Maceta: " + String(getPotVolumeL(), 1) + " L\n";
-  msg += "Bomba: " + String(getPumpFlow(), 1) + " mL/s\n";
+  if (isPumpCalibrated()) {
+    msg += "Bomba: " + String(getPumpFlow(), 1) + " mL/s\n";
+  } else {
+    msg += "Bomba: sin calibrar\n";
+  }
   msg += "Umbral suelo: " + String(getSoilThreshold()) + "%\n";
   msg += "Umbral humedad alta: " + String(getSoilHighThreshold()) + "%\n";
   msg += "Intervalo mínimo entre riegos: " + String(getIrrigationIntervalDays()) + " días";
@@ -238,7 +242,9 @@ String formatIrrigationConfig() {
 void printIrrigationConfig() { Serial.println(formatIrrigationConfig()); }
 
 int soilPercentFromAdc(int reading) {
-  int clampedReading = constrain(reading, soilWetAdc, soilDryAdc);
+  const int minReading = min(soilWetAdc, soilDryAdc);
+  const int maxReading = max(soilWetAdc, soilDryAdc);
+  int clampedReading = constrain(reading, minReading, maxReading);
   int percent = map(clampedReading, soilWetAdc, soilDryAdc, 100, 0);
   return constrain(percent, 0, 100);
 }
@@ -584,6 +590,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     float ml = args.toFloat();
     if (ml <= 0) return "Uso: /regar [mL]";
     ml = min(ml, 1500.0f);
+    if (!isPumpCalibrated()) return "Bomba sin calibrar. Ejecuta /calibrar antes de regar.";
     irrigateVolume(ml, readSoilMoisture());
     return "Riego manual por " + String(ml) + " mL";
   }
