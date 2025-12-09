@@ -255,7 +255,7 @@ String formatIrrigationConfig() {
   }
   msg += "Umbral suelo: " + String(getSoilThreshold()) + "%\n";
   msg += "Umbral humedad alta: " + String(getSoilHighThreshold()) + "%\n";
-  msg += "Intervalo mínimo entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
+  msg += "Dias entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
   msg += "Hora local: " + nowStr;
   return msg;
 }
