@@ -57,6 +57,12 @@ float lastDhtRh = NAN;
 unsigned long lastDhtReadMs = 0;
 bool lastDhtValid = false;
 
+bool lastSerialMessageSent = false;
+String lastSerialMessage;
+bool lastTelegramMessageSent = false;
+String lastTelegramMessage;
+String lastTelegramChatIdSent;
+
 // Configuración de zona horaria (por defecto UTC-5, sin horario de verano).
 // En la especificación POSIX el valor numérico representa las horas al oeste
 // de Greenwich, por lo que se utiliza "GMT5" para obtener UTC-5.
@@ -109,6 +115,8 @@ String formatDateTime(const struct tm &timeinfo) {
   strftime(buffer, sizeof(buffer), "%d/%m/%Y %H:%M:%S", &timeinfo);
   return String(buffer);
 }
+
+bool areLightsOn() { return digitalRead(PIN_RELE2) == LOW; }
 
 bool readAmbient(float &tempC, float &humidity) {
   const unsigned long now = millis();
@@ -263,21 +271,26 @@ String formatStatus() {
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
   String msg;
-  msg += "====Estado del invernadero====\n";
-  msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
+  msg += "====Estado del invernadero====\n\n";
   if (ambientOk) {
     msg += "Temp y humedad: " + String(ambientTemp, 1) + "°C | " + String(ambientRh, 0) + "%\n";
   } else {
     msg += "Temp y humedad: N/D\n";
   }
   msg += "Humedad suelo: " + String(soilPercent) + "% (ADC " + String(soilAdc) + ")\n";
+  msg += "LUCES: " + String(areLightsOn() ? "ON" : "OFF") + "\n";
+  msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
+  msg += "Ciclo de luz: N/D\n";
+  msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
+  msg += "\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
   msg += "Hora local: " + nowStr + "\n";
-  msg += "Riego automático: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF") + "\n";
-  msg += "Autolecturas: " + String(autoReadingsEnabled ? "ON" : "OFF") + (autoReadingsEnabled ? " cada " + String(autoReadingsIntervalMs / 60000) + " min" : "") + "\n";
-  msg += "Ventilador: " + String(fanAuto ? "AUTO" : "MANUAL") + (fanAuto ? "" : " " + String(fanPercent) + "%") + "\n";
+  msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") + "\n";
+  String fanStatus = fanAuto ? "AUTO" : "MANUAL " + String(fanPercent) + "%";
+  msg += "Ventilador: " + fanStatus + "\n";
   msg += "Alertas: " + String(alertsEnabled ? "ON" : "OFF") + "\n";
-  msg += "Ciclo de luz: N/D";
+  msg += "Autolecturas: " + String(autoReadingsEnabled ? "ON" : "OFF") +
+         (autoReadingsEnabled ? " cada " + String(autoReadingsIntervalMs / 60000) + " min" : "") + "\n\n\n";
   return msg;
 }
 
@@ -437,10 +450,19 @@ void broadcastMessage(const String &msg) {
     return;
   }
 
-  Serial.println(msg);
+  if (!lastSerialMessageSent || msg != lastSerialMessage) {
+    Serial.println(msg);
+    lastSerialMessage = msg;
+    lastSerialMessageSent = true;
+  }
 
   if (telegramEnabled && WiFi.status() == WL_CONNECTED && telegramBot != nullptr && !lastTelegramChatId.isEmpty()) {
-    telegramBot->sendMessage(lastTelegramChatId, msg, "");
+    if (!lastTelegramMessageSent || msg != lastTelegramMessage || lastTelegramChatId != lastTelegramChatIdSent) {
+      telegramBot->sendMessage(lastTelegramChatId, msg, "");
+      lastTelegramMessage = msg;
+      lastTelegramChatIdSent = lastTelegramChatId;
+      lastTelegramMessageSent = true;
+    }
   }
 }
 
@@ -942,6 +964,8 @@ void setup() {
   configInit();
   configLoad();
   initIrrigationHardware();
+  pinMode(PIN_RELE2, OUTPUT);
+  digitalWrite(PIN_RELE2, HIGH);
   printIrrigationConfig();
 
   loadStoredCredentials();
