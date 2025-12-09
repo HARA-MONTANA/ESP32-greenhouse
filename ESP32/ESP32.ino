@@ -158,7 +158,7 @@ String promptOrStoredValue(const char *label, const String &storedValue, uint32_
     Serial.print(label);
 
     if (!storedValue.isEmpty()) {
-      Serial.print(" (presiona Enter para usar el valor guardado)");
+      Serial.print(" (Enter para usar el valor guardado)");
     }
 
     Serial.println();
@@ -985,16 +985,27 @@ bool setTimeFromRtc() {
 }
 
 bool syncTimeWithOffset(int offsetHours, unsigned long maxWaitMs) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("No hay conexión WiFi, no se puede sincronizar NTP.");
+    return false;
+  }
+
   timezoneInfo = tzFromOffset(offsetHours);
   configureTimezone();
   Serial.println("Sincronizando hora NTP (" + timezoneInfo + ")...");
 
-  configTzTime(timezoneInfo.c_str(), "pool.ntp.org", "time.nist.gov");
+  configTzTime(timezoneInfo.c_str(), "pool.ntp.org", "time.nist.gov", "time.cloudflare.com");
 
   struct tm timeinfo;
   unsigned long start = millis();
 
   while (millis() - start < maxWaitMs) {
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println();
+      Serial.println("Conexión WiFi perdida durante la sincronización NTP.");
+      return false;
+    }
+
     if (getLocalTime(&timeinfo)) {
       Serial.println();
       Serial.println("Hora NTP sincronizada.");
@@ -1018,6 +1029,11 @@ bool syncTimeWithOffset(int offsetHours, unsigned long maxWaitMs) {
 // =========================================================
 bool verifyTelegramToken(uint8_t maxAttempts, uint16_t retryDelayMs) {
   if (telegramBot == nullptr) {
+    return false;
+  }
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("Sin conexión WiFi, no se puede verificar el token.");
     return false;
   }
 
