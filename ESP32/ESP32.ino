@@ -827,6 +827,94 @@ void requestCredentials() {
 
 
 // =========================================================
+//  INICIALIZACIÓN DE RED Y SERVICIOS
+// =========================================================
+bool connectToWifi(const String &ssid, const String &password) {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid.c_str(), password.c_str());
+
+  Serial.print("Conectando a WiFi");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print('.');
+  }
+
+  Serial.println();
+  Serial.println("WiFi conectado.");
+  Serial.print("IP: ");
+  Serial.println(WiFi.localIP());
+  saveWifiCredentials(ssid, password);
+  return true;
+}
+
+void configureTelegramTransport() {
+  telegramClient.setCACert(TELEGRAM_CERTIFICATE_ROOT);
+  telegramClient.setTimeout(15000);
+}
+
+bool ensureTimeReady(int offsetHours) {
+  timezoneOffsetHours = offsetHours;
+  timezoneInfo = tzFromOffset(timezoneOffsetHours);
+  configureTimezone();
+
+  bool timeSynced = syncTimeWithOffset(timezoneOffsetHours);
+
+  if (!timeSynced) {
+    Serial.println("NTP no respondió, intentando usar el RTC...");
+    timeSynced = setTimeFromRtc();
+  }
+
+  if (!timeSynced) {
+    Serial.println("Sin hora válida, continuando sin sincronización confirmada.");
+    return false;
+  }
+
+  if (!syncRtcFromSystemClock()) {
+    Serial.println("No se pudo actualizar el RTC con la hora obtenida.");
+  }
+
+  return true;
+}
+
+bool initializeTelegramBot(uint8_t maxTokenRetries = 2) {
+  bool tokenVerificado = false;
+  uint8_t intentosToken = 0;
+
+  while (!tokenVerificado && intentosToken < maxTokenRetries) {
+    delete telegramBot;
+    telegramBot = new UniversalTelegramBot(telegramToken, telegramClient);
+
+    tokenVerificado = verifyTelegramToken();
+
+    if (!tokenVerificado) {
+      intentosToken++;
+
+      if (intentosToken >= maxTokenRetries) {
+        Serial.println("No se pudo verificar el token tras varios intentos.");
+        Serial.println("Se continuará sin verificación; si el token es incorrecto el bot no responderá.");
+        break;
+      }
+
+      Serial.println("Ingresa un token válido o presiona Enter para reutilizarlo.");
+      String nuevoToken = readLineFromSerial("Nuevo token (vacío para mantener): ");
+
+      if (!nuevoToken.isEmpty()) {
+        telegramToken = nuevoToken;
+      }
+    }
+  }
+
+  if (tokenVerificado) {
+    saveTelegramToken(telegramToken);
+    Serial.println("Token verificado correctamente.");
+  }
+
+  telegramEnabled = tokenVerificado;
+  return tokenVerificado;
+}
+
+
+// =========================================================
 //  NTP + ZONA HORARIA GMT-5
 // =========================================================
 void configureTimezone() {
@@ -966,7 +1054,6 @@ void setup() {
   initIrrigationHardware();
   pinMode(PIN_RELE2, OUTPUT);
   digitalWrite(PIN_RELE2, HIGH);
-  printIrrigationConfig();
 
   loadStoredCredentials();
   requestCredentials();
@@ -979,78 +1066,25 @@ void setup() {
   // -------------------------------------------------------
   //  CONEXIÓN WIFI
   // -------------------------------------------------------
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
-
-  Serial.print("Conectando a WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print('.');
-  }
-  Serial.println();
-  Serial.println("WiFi conectado.");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
-  saveWifiCredentials(wifiSsid, wifiPassword);
+  connectToWifi(wifiSsid, wifiPassword);
 
   // -------------------------------------------------------
   //  SINCRONIZAR HORA NTP (IMPORTANTE PARA TLS)
   // -------------------------------------------------------
-  bool timeSynced = syncTimeWithOffset(timezoneOffsetHours);
-
-  if (!timeSynced) {
-    Serial.println("NTP no respondió, intentando usar el RTC...");
-    timeSynced = setTimeFromRtc();
-  }
-
-  if (!timeSynced) {
-    Serial.println("Sin hora válida, continuando sin sincronización confirmada.");
-  } else if (!syncRtcFromSystemClock()) {
-    Serial.println("No se pudo actualizar el RTC con la hora obtenida.");
-  }
+  ensureTimeReady(timezoneOffsetHours);
 
   // -------------------------------------------------------
   //  CONFIGURAR CLIENTE SEGURO PARA TELEGRAM
   // -------------------------------------------------------
-  telegramClient.setCACert(TELEGRAM_CERTIFICATE_ROOT);  
-  telegramClient.setTimeout(15000);
+  configureTelegramTransport();
 
   // -------------------------------------------------------
   //  VERIFICACIÓN ITERATIVA DEL TOKEN
   // -------------------------------------------------------
-  bool tokenVerificado = false;
-  uint8_t intentosToken = 0;
-  const uint8_t maxIntentosToken = 2;  // cantidad de veces que se solicitará un token nuevo
+  initializeTelegramBot();
 
-  while (!tokenVerificado && intentosToken < maxIntentosToken) {
-    delete telegramBot;
-    telegramBot = new UniversalTelegramBot(telegramToken, telegramClient);
-
-    tokenVerificado = verifyTelegramToken();
-
-    if (!tokenVerificado) {
-      intentosToken++;
-
-      if (intentosToken >= maxIntentosToken) {
-        Serial.println("No se pudo verificar el token tras varios intentos.");
-        Serial.println("Se continuará sin verificación; si el token es incorrecto el bot no responderá.");
-        break;
-      }
-
-      Serial.println("Ingresa un token válido o presiona Enter para reutilizarlo.");
-      String nuevoToken = readLineFromSerial("Nuevo token (vacío para mantener): ");
-
-      if (!nuevoToken.isEmpty()) {
-        telegramToken = nuevoToken;
-      }
-    }
-  }
-
-  if (tokenVerificado) {
-    saveTelegramToken(telegramToken);
-    Serial.println("Token verificado correctamente.");
-    telegramEnabled = true;
-  }
+  // Mostrar configuración solo después de completar el flujo de credenciales.
+  printIrrigationConfig();
 
   Serial.println("Sistema listo.");
 }
