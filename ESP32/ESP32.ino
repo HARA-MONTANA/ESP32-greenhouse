@@ -223,7 +223,7 @@ String formatLastIrrigation() {
 
 String formatIrrigationConfig() {
   String msg;
-  msg += "Configuración del invernadero\n";
+  msg += "====Configuración del invernadero====\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
@@ -263,16 +263,16 @@ String formatStatus() {
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
   String msg;
-  msg += "Estado del invernadero\n";
+  msg += "====Estado del invernadero====\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   if (ambientOk) {
-    msg += "Temperatura y humedad: " + String(ambientTemp, 1) + "°C, " + String(ambientRh, 0) + "%\n";
+    msg += "Temp y humedad: " + String(ambientTemp, 1) + "°C | " + String(ambientRh, 0) + "%\n";
   } else {
-    msg += "Temperatura y humedad: N/D\n";
+    msg += "Temp y humedad: N/D\n";
   }
   msg += "Humedad suelo: " + String(soilPercent) + "% (ADC " + String(soilAdc) + ")\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
-  msg += "Hora: " + nowStr + "\n";
+  msg += "Hora local: " + nowStr + "\n";
   msg += "Riego automático: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF") + "\n";
   msg += "Autolecturas: " + String(autoReadingsEnabled ? "ON" : "OFF") + (autoReadingsEnabled ? " cada " + String(autoReadingsIntervalMs / 60000) + " min" : "") + "\n";
   msg += "Ventilador: " + String(fanAuto ? "AUTO" : "MANUAL") + (fanAuto ? "" : " " + String(fanPercent) + "%") + "\n";
