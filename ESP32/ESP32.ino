@@ -24,6 +24,7 @@ String storedWifiPassword;
 String storedTelegramToken;
 
 Preferences credentialsStore;
+Preferences settingsStore;
 unsigned long lastSoilCheckMs = 0;
 unsigned long lastTelegramPollMs = 0;
 unsigned long lastAutoReadingMs = 0;
@@ -78,6 +79,8 @@ int timezoneOffsetHours = -5;
 // Declaraciones anticipadas para funciones definidas más adelante.
 bool syncTimeWithOffset(int offsetHours = -5, unsigned long maxWaitMs = 60000);
 bool verifyTelegramToken(uint8_t maxAttempts = 5, uint16_t retryDelayMs = 1000);
+void loadRuntimeSettings();
+void saveRuntimeSettings();
 
 
 // =========================================================
@@ -182,6 +185,41 @@ String promptOrStoredValue(const char *label, const String &storedValue, uint32_
 
     return value;
   }
+}
+
+void ensureSettingsStore() {
+  static bool started = false;
+  if (!started) {
+    settingsStore.begin("runtime", false);
+    started = true;
+  }
+}
+
+void loadRuntimeSettings() {
+  ensureSettingsStore();
+
+  soilDryAdc = constrain(settingsStore.getInt("soilDry", soilDryAdc), 0, 4095);
+  soilWetAdc = constrain(settingsStore.getInt("soilWet", soilWetAdc), 0, 4095);
+
+  if (soilDryAdc == soilWetAdc) {
+    soilDryAdc = min(soilWetAdc + 1, 4095);
+  }
+
+  tempAlertThreshold = constrain(settingsStore.getInt("tempHi", tempAlertThreshold), 1, 100);
+  rhLowAlertThreshold = constrain(settingsStore.getInt("rhLow", rhLowAlertThreshold), 1, 100);
+  rhHighAlertThreshold = constrain(settingsStore.getInt("rhHigh", rhHighAlertThreshold), 1, 100);
+  mqAlertThreshold = max(settingsStore.getInt("mqTh", mqAlertThreshold), 1);
+}
+
+void saveRuntimeSettings() {
+  ensureSettingsStore();
+
+  settingsStore.putInt("soilDry", soilDryAdc);
+  settingsStore.putInt("soilWet", soilWetAdc);
+  settingsStore.putInt("tempHi", tempAlertThreshold);
+  settingsStore.putInt("rhLow", rhLowAlertThreshold);
+  settingsStore.putInt("rhHigh", rhHighAlertThreshold);
+  settingsStore.putInt("mqTh", mqAlertThreshold);
 }
 
 plantStage stageFromString(const String &value) {
@@ -603,8 +641,12 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   if (base == "/cal_suelo") {
     int space2 = args.indexOf(' ');
     if (space2 == -1) return "Uso: /cal_suelo [SECO] [HUMEDO]";
-    soilDryAdc = args.substring(0, space2).toInt();
-    soilWetAdc = args.substring(space2 + 1).toInt();
+    soilDryAdc = constrain(args.substring(0, space2).toInt(), 0, 4095);
+    soilWetAdc = constrain(args.substring(space2 + 1).toInt(), 0, 4095);
+    if (soilDryAdc <= soilWetAdc) {
+      soilDryAdc = min(soilWetAdc + 1, 4095);
+    }
+    updatedConfig = true;
     return "Calibración suelo actualizada. Seco=" + String(soilDryAdc) + " húmedo=" + String(soilWetAdc);
   }
 
@@ -635,29 +677,33 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   if (base == "/alerta_temp_alta") {
     int val = args.toInt();
     if (val <= 0) return "Uso: /alerta_temp_alta [C]";
-    tempAlertThreshold = val;
-    return "Umbral temp alta: " + String(val) + " C";
+    tempAlertThreshold = constrain(val, 1, 100);
+    updatedConfig = true;
+    return "Umbral temp alta: " + String(tempAlertThreshold) + " C";
   }
 
   if (base == "/alerta_rh_baja") {
     int val = args.toInt();
     if (val <= 0) return "Uso: /alerta_rh_baja [%]";
-    rhLowAlertThreshold = val;
-    return "Umbral humedad ambiente baja: " + String(val) + "%";
+    rhLowAlertThreshold = constrain(val, 1, 100);
+    updatedConfig = true;
+    return "Umbral humedad ambiente baja: " + String(rhLowAlertThreshold) + "%";
   }
 
   if (base == "/alerta_rh_alta") {
     int val = args.toInt();
     if (val <= 0) return "Uso: /alerta_rh_alta [%]";
-    rhHighAlertThreshold = val;
-    return "Umbral humedad ambiente alta: " + String(val) + "%";
+    rhHighAlertThreshold = constrain(val, 1, 100);
+    updatedConfig = true;
+    return "Umbral humedad ambiente alta: " + String(rhHighAlertThreshold) + "%";
   }
 
   if (base == "/alerta_mq") {
     int val = args.toInt();
     if (val <= 0) return "Uso: /alerta_mq [N]";
-    mqAlertThreshold = val;
-    return "Umbral MQ: " + String(val);
+    mqAlertThreshold = max(val, 1);
+    updatedConfig = true;
+    return "Umbral MQ: " + String(mqAlertThreshold);
   }
 
   if (base == "/mostrar_conf_riego") {
@@ -781,6 +827,7 @@ void pollTelegram() {
 
       if (updated) {
         configSave();
+        saveRuntimeSettings();
       }
     }
 
@@ -1146,6 +1193,7 @@ void setup() {
 
   configInit();
   configLoad();
+  loadRuntimeSettings();
   initIrrigationHardware();
   pinMode(PIN_RELE2, OUTPUT);
   digitalWrite(PIN_RELE2, HIGH);
