@@ -11,7 +11,7 @@
 // Analog sensors
 #define PIN_MQ135     34  // MQ-135 (analog input)
 #define PIN_SUELO     35  // Soil moisture (analog input)
-#define PIN_FLOT      33  // Float switch (water level, digital)
+#define PIN_FLOAT     33  // Float switch (water level, digital)
 
 // PWM for fans
 #define PIN_FAN_PWM   25  // PWM to MOSFET (fans)

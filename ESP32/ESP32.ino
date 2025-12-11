@@ -24,19 +24,26 @@ String storedWifiPassword;
 String storedTelegramToken;
 
 Preferences credentialsStore;
+Preferences settingsStore;
 unsigned long lastSoilCheckMs = 0;
 unsigned long lastTelegramPollMs = 0;
 unsigned long lastAutoReadingMs = 0;
 
-bool alertsEnabled = true;
 bool autoReadingsEnabled = false;
 unsigned long autoReadingsIntervalMs = 300000;  // 5 minutos
 
 int soilDryAdc = 2150;
 int soilWetAdc = 500;
-int tempAlertThreshold = 35;
-int rhAlertThreshold = 85;
-int mqAlertThreshold = 300;
+int tempAlertThreshold = 30;
+int rhLowAlertThreshold = 50;
+int rhHighAlertThreshold = 50;
+int mqAlertThreshold = 500;
+
+bool alertWaterSent = false;
+bool alertTempHighSent = false;
+bool alertRhLowSent = false;
+bool alertRhHighSent = false;
+bool alertMqSent = false;
 
 bool awaitingCalibrationVolume = false;
 bool fanAuto = true;
@@ -72,6 +79,8 @@ int timezoneOffsetHours = -5;
 // Declaraciones anticipadas para funciones definidas más adelante.
 bool syncTimeWithOffset(int offsetHours = -5, unsigned long maxWaitMs = 60000);
 bool verifyTelegramToken(uint8_t maxAttempts = 5, uint16_t retryDelayMs = 1000);
+void loadRuntimeSettings();
+void saveRuntimeSettings();
 
 
 // =========================================================
@@ -178,6 +187,41 @@ String promptOrStoredValue(const char *label, const String &storedValue, uint32_
   }
 }
 
+void ensureSettingsStore() {
+  static bool started = false;
+  if (!started) {
+    settingsStore.begin("runtime", false);
+    started = true;
+  }
+}
+
+void loadRuntimeSettings() {
+  ensureSettingsStore();
+
+  soilDryAdc = constrain(settingsStore.getInt("soilDry", soilDryAdc), 0, 4095);
+  soilWetAdc = constrain(settingsStore.getInt("soilWet", soilWetAdc), 0, 4095);
+
+  if (soilDryAdc == soilWetAdc) {
+    soilDryAdc = min(soilWetAdc + 1, 4095);
+  }
+
+  tempAlertThreshold = constrain(settingsStore.getInt("tempHi", tempAlertThreshold), 1, 100);
+  rhLowAlertThreshold = constrain(settingsStore.getInt("rhLow", rhLowAlertThreshold), 1, 100);
+  rhHighAlertThreshold = constrain(settingsStore.getInt("rhHigh", rhHighAlertThreshold), 1, 100);
+  mqAlertThreshold = max(settingsStore.getInt("mqTh", mqAlertThreshold), 1);
+}
+
+void saveRuntimeSettings() {
+  ensureSettingsStore();
+
+  settingsStore.putInt("soilDry", soilDryAdc);
+  settingsStore.putInt("soilWet", soilWetAdc);
+  settingsStore.putInt("tempHi", tempAlertThreshold);
+  settingsStore.putInt("rhLow", rhLowAlertThreshold);
+  settingsStore.putInt("rhHigh", rhHighAlertThreshold);
+  settingsStore.putInt("mqTh", mqAlertThreshold);
+}
+
 plantStage stageFromString(const String &value) {
   String lower = value;
   lower.toLowerCase();
@@ -277,6 +321,7 @@ String formatStatus() {
 
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
+  const bool waterAvailable = isTankWaterAvailable();
   const float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
   String msg;
   msg += "==GH==\n";
@@ -286,14 +331,80 @@ String formatStatus() {
     msg += "T|H: N/D\n";
   }
   msg += "Suelo|PWM: " + String(soilPercent) + "% (" + String(soilAdc) + ") | " + String(fanPercent) + "%\n";
+  msg += "AGUA: " + String(waterAvailable ? "SI" : "NO") + "\n";
   msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") + " | mL: " + String(stageMl, 1) + "\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
   msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") + " | FAN: " + String(fanAuto ? "AUTO" : "MANUAL") + "\n";
-  msg += "Alerts: " + String(alertsEnabled ? "ON" : "OFF") + " | AutoLect: ";
+  msg += "AutoLect: ";
   msg +=
       autoReadingsEnabled ? String(autoReadingsIntervalMs / 60000) + " min\n" : String("OFF\n");
   return msg;
+}
+
+bool stageSupportsLowRhAlerts(plantStage stage) {
+  return stage == PLANTULA || stage == VEGETATIVO;
+}
+
+bool stageSupportsHighRhAlerts(plantStage stage) {
+  return stage == PRE_FLORACION || stage == FLORACION || stage == FINAL;
+}
+
+void evaluateAlerts() {
+  const bool waterAvailable = isTankWaterAvailable();
+  if (!waterAvailable && !alertWaterSent) {
+    broadcastMessage("ALERTA: tanque sin agua");
+    alertWaterSent = true;
+  } else if (waterAvailable) {
+    alertWaterSent = false;
+  }
+
+  float tempC = NAN;
+  float rh = NAN;
+  const bool ambientOk = readAmbient(tempC, rh);
+  plantStage stage = getCurrentStage();
+
+  if (ambientOk) {
+    const bool tempHigh = tempAlertThreshold > 0 && tempC >= tempAlertThreshold;
+    if (tempHigh && !alertTempHighSent) {
+      broadcastMessage("ALERTA: temperatura alta (" + String(tempC, 1) + "°C >= " + String(tempAlertThreshold) + "°C)");
+      alertTempHighSent = true;
+    } else if (!tempHigh) {
+      alertTempHighSent = false;
+    }
+
+    const bool lowRhActive = stageSupportsLowRhAlerts(stage);
+    const bool highRhActive = stageSupportsHighRhAlerts(stage);
+
+    const bool rhTooLow = lowRhActive && rhLowAlertThreshold > 0 && rh < rhLowAlertThreshold;
+    if (rhTooLow && !alertRhLowSent) {
+      broadcastMessage("ALERTA: humedad ambiente baja (" + String(rh, 0) + "% < " + String(rhLowAlertThreshold) + "%)");
+      alertRhLowSent = true;
+    } else if (!rhTooLow || !lowRhActive) {
+      alertRhLowSent = false;
+    }
+
+    const bool rhTooHigh = highRhActive && rhHighAlertThreshold > 0 && rh > rhHighAlertThreshold;
+    if (rhTooHigh && !alertRhHighSent) {
+      broadcastMessage("ALERTA: humedad ambiente alta (" + String(rh, 0) + "% > " + String(rhHighAlertThreshold) + "%)");
+      alertRhHighSent = true;
+    } else if (!rhTooHigh || !highRhActive) {
+      alertRhHighSent = false;
+    }
+  } else {
+    alertTempHighSent = false;
+    alertRhLowSent = false;
+    alertRhHighSent = false;
+  }
+
+  const int mqReading = analogRead(PIN_MQ135);
+  const bool poorAir = mqAlertThreshold > 0 && mqReading >= mqAlertThreshold;
+  if (poorAir && !alertMqSent) {
+    broadcastMessage("ALERTA: aire pobre detectado (MQ=" + String(mqReading) + " >= " + String(mqAlertThreshold) + ")");
+    alertMqSent = true;
+  } else if (!poorAir) {
+    alertMqSent = false;
+  }
 }
 
 String tzFromOffset(int offsetHours) {
@@ -479,11 +590,11 @@ String commandHelp() {
   help += "Comandos disponibles:\n";
   help += "/start, /status, /maceta [L], /etapa [plantula|vegetativo|pre-floracion|floracion|final]\n";
   help += "/cal_suelo [SECO] [HUMEDO], /alerta_suelo [%], /umbral_suelo [%], /intervalo_riego [dias]\n";
-  help += "/alerta_temp_alta [C], /alerta_rh [%], /alerta_mq [N]\n";
+  help += "/alerta_temp_alta [C], /alerta_rh_baja [%], /alerta_rh_alta [%], /alerta_mq [N]\n";
   help += "/mostrar_conf_riego\n";
   help += "/calibrar [mL], /riego_auto [on|off], /regar [mL]\n";
   help += "/fanauto [on|off], /fan [0-100]\n";
-  help += "/autolecturas [on|off] [min], /alertas [on|off]\n";
+  help += "/autolecturas [on|off] [min]\n";
   help += "/addid [ID], /delid [ID], /ids";
   return help;
 }
@@ -530,8 +641,12 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   if (base == "/cal_suelo") {
     int space2 = args.indexOf(' ');
     if (space2 == -1) return "Uso: /cal_suelo [SECO] [HUMEDO]";
-    soilDryAdc = args.substring(0, space2).toInt();
-    soilWetAdc = args.substring(space2 + 1).toInt();
+    soilDryAdc = constrain(args.substring(0, space2).toInt(), 0, 4095);
+    soilWetAdc = constrain(args.substring(space2 + 1).toInt(), 0, 4095);
+    if (soilDryAdc <= soilWetAdc) {
+      soilDryAdc = min(soilWetAdc + 1, 4095);
+    }
+    updatedConfig = true;
     return "Calibración suelo actualizada. Seco=" + String(soilDryAdc) + " húmedo=" + String(soilWetAdc);
   }
 
@@ -562,22 +677,33 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   if (base == "/alerta_temp_alta") {
     int val = args.toInt();
     if (val <= 0) return "Uso: /alerta_temp_alta [C]";
-    tempAlertThreshold = val;
-    return "Umbral temp alta: " + String(val) + " C";
+    tempAlertThreshold = constrain(val, 1, 100);
+    updatedConfig = true;
+    return "Umbral temp alta: " + String(tempAlertThreshold) + " C";
   }
 
-  if (base == "/alerta_rh") {
+  if (base == "/alerta_rh_baja") {
     int val = args.toInt();
-    if (val <= 0) return "Uso: /alerta_rh [%]";
-    rhAlertThreshold = val;
-    return "Umbral humedad ambiente: " + String(val) + "%";
+    if (val <= 0) return "Uso: /alerta_rh_baja [%]";
+    rhLowAlertThreshold = constrain(val, 1, 100);
+    updatedConfig = true;
+    return "Umbral humedad ambiente baja: " + String(rhLowAlertThreshold) + "%";
+  }
+
+  if (base == "/alerta_rh_alta") {
+    int val = args.toInt();
+    if (val <= 0) return "Uso: /alerta_rh_alta [%]";
+    rhHighAlertThreshold = constrain(val, 1, 100);
+    updatedConfig = true;
+    return "Umbral humedad ambiente alta: " + String(rhHighAlertThreshold) + "%";
   }
 
   if (base == "/alerta_mq") {
     int val = args.toInt();
     if (val <= 0) return "Uso: /alerta_mq [N]";
-    mqAlertThreshold = val;
-    return "Umbral MQ: " + String(val);
+    mqAlertThreshold = max(val, 1);
+    updatedConfig = true;
+    return "Umbral MQ: " + String(mqAlertThreshold);
   }
 
   if (base == "/mostrar_conf_riego") {
@@ -599,7 +725,9 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     if (!setPumpFlow(newFlow)) return "Caudal calculado fuera de rango (1-50 mL/s).";
     updatedConfig = true;
     awaitingCalibrationVolume = false;
-    return "Caudal calculado: " + String(newFlow) + " mL/s";
+    setAutoIrrigationEnabled(false);
+    return "Caudal calculado: " + String(newFlow) +
+           " mL/s. ¿Activar riego automático ahora? Envía /riego_auto on cuando la manguera esté en la maceta.";
   }
 
   if (base == "/riego_auto") {
@@ -641,11 +769,6 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
       if (mins > 0) autoReadingsIntervalMs = mins * 60000UL;
     }
     return String("Autolecturas ") + (autoReadingsEnabled ? "activadas" : "desactivadas");
-  }
-
-  if (base == "/alertas") {
-    alertsEnabled = parseOnOff(args);
-    return String("Alertas ") + (alertsEnabled ? "activadas" : "desactivadas");
   }
 
   if (base == "/addid") {
@@ -704,6 +827,7 @@ void pollTelegram() {
 
       if (updated) {
         configSave();
+        saveRuntimeSettings();
       }
     }
 
@@ -1069,6 +1193,7 @@ void setup() {
 
   configInit();
   configLoad();
+  loadRuntimeSettings();
   initIrrigationHardware();
   pinMode(PIN_RELE2, OUTPUT);
   digitalWrite(PIN_RELE2, HIGH);
@@ -1121,5 +1246,6 @@ void loop() {
   if (now - lastSoilCheckMs >= 2000) {
     lastSoilCheckMs = now;
     checkSoilAndIrrigate();
+    evaluateAlerts();
   }
 }
