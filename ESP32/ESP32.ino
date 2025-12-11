@@ -277,6 +277,7 @@ String formatStatus() {
 
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
+  const bool waterAvailable = isTankWaterAvailable();
   const float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
   String msg;
   msg += "==GH==\n";
@@ -286,6 +287,7 @@ String formatStatus() {
     msg += "T|H: N/D\n";
   }
   msg += "Suelo|PWM: " + String(soilPercent) + "% (" + String(soilAdc) + ") | " + String(fanPercent) + "%\n";
+  msg += "Tanque: " + String(waterAvailable ? "con agua" : "SIN AGUA") + "\n";
   msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") + " | mL: " + String(stageMl, 1) + "\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
@@ -293,6 +295,9 @@ String formatStatus() {
   msg += "Alerts: " + String(alertsEnabled ? "ON" : "OFF") + " | AutoLect: ";
   msg +=
       autoReadingsEnabled ? String(autoReadingsIntervalMs / 60000) + " min\n" : String("OFF\n");
+  if (!waterAvailable) {
+    msg += "ALERTA: tanque sin agua\n";
+  }
   return msg;
 }
 
@@ -599,7 +604,9 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     if (!setPumpFlow(newFlow)) return "Caudal calculado fuera de rango (1-50 mL/s).";
     updatedConfig = true;
     awaitingCalibrationVolume = false;
-    return "Caudal calculado: " + String(newFlow) + " mL/s";
+    setAutoIrrigationEnabled(false);
+    return "Caudal calculado: " + String(newFlow) +
+           " mL/s. ¿Activar riego automático ahora? Envía /riego_auto on cuando la manguera esté en la maceta.";
   }
 
   if (base == "/riego_auto") {

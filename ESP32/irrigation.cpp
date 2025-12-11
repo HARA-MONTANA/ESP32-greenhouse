@@ -11,15 +11,18 @@ String stageToString(plantStage stage);
 
 namespace {
 const int R_Agua = PIN_RELE1;
-bool autoIrrigationEnabled = true;
+bool autoIrrigationEnabled = false;
 }
 
 void initIrrigationHardware() {
   pinMode(R_Agua, OUTPUT);
   digitalWrite(R_Agua, HIGH);  // Relé inactivo en HIGH
+  pinMode(PIN_FLOAT, INPUT_PULLUP);
 }
 
 int readSoilMoisture() { return analogRead(PIN_SUELO); }
+
+bool isTankWaterAvailable() { return digitalRead(PIN_FLOAT) == HIGH; }
 
 bool checkSoilAndIrrigate() {
   const int soilReading = readSoilMoisture();
