@@ -12,6 +12,11 @@ int mlVeg = 100; // Vegetativo
 int mlPre = 150; // Pre floración
 int mlFlo = 200; // Floración
 int mlFin = 120; // Final
+int lightHoursPl = 18;
+int lightHoursVeg = 18;
+int lightHoursPre = 12;
+int lightHoursFlo = 12;
+int lightHoursFin = 12;
 float potVolumeL = 15.0f;
 float pumpFlow = 0.0f;        // mL/s
 bool pumpCalibrated = false;
@@ -34,6 +39,13 @@ int clampAndStoreMlDefaults(const char *key, int defaultValue) {
   return clamped;
 }
 
+int clampAndStoreLightHours(const char *key, int defaultValue) {
+  const int stored = irrigationPrefs.isKey(key) ? irrigationPrefs.getInt(key, defaultValue) : defaultValue;
+  const int clamped = constrain(stored, 1, 24);
+  irrigationPrefs.putInt(key, clamped);
+  return clamped;
+}
+
 }  // namespace
 
 void configInit() {
@@ -48,6 +60,16 @@ void configLoad() {
   mlPre = clampAndStoreMlDefaults("ml_pre", mlPre);
   mlFlo = clampAndStoreMlDefaults("ml_flo", mlFlo);
   mlFin = clampAndStoreMlDefaults("ml_fin", mlFin);
+
+  lightHoursPl = clampAndStoreLightHours("lh_pl", lightHoursPl);
+  lightHoursVeg = clampAndStoreLightHours("lh_veg", lightHoursVeg);
+  // Etapas posteriores usan 12h fijas, se restablecen en NVS por si hubo ediciones previas.
+  lightHoursPre = 12;
+  lightHoursFlo = 12;
+  lightHoursFin = 12;
+  irrigationPrefs.putInt("lh_pre", lightHoursPre);
+  irrigationPrefs.putInt("lh_flo", lightHoursFlo);
+  irrigationPrefs.putInt("lh_fin", lightHoursFin);
 
   if (!irrigationPrefs.isKey("potL")) {
     irrigationPrefs.putFloat("potL", potVolumeL);
@@ -112,6 +134,11 @@ void configSave() {
   irrigationPrefs.putInt("ml_pre", mlPre);
   irrigationPrefs.putInt("ml_flo", mlFlo);
   irrigationPrefs.putInt("ml_fin", mlFin);
+  irrigationPrefs.putInt("lh_pl", lightHoursPl);
+  irrigationPrefs.putInt("lh_veg", lightHoursVeg);
+  irrigationPrefs.putInt("lh_pre", lightHoursPre);
+  irrigationPrefs.putInt("lh_flo", lightHoursFlo);
+  irrigationPrefs.putInt("lh_fin", lightHoursFin);
   irrigationPrefs.putFloat("potL", potVolumeL);
   irrigationPrefs.putFloat("flow", pumpFlow);
   irrigationPrefs.putBool("flowCal", pumpCalibrated);
@@ -128,6 +155,11 @@ void configReset() {
   mlPre = 150;
   mlFlo = 200;
   mlFin = 120;
+  lightHoursPl = 18;
+  lightHoursVeg = 18;
+  lightHoursPre = 12;
+  lightHoursFlo = 12;
+  lightHoursFin = 12;
   potVolumeL = 15.0f;
   pumpFlow = 0.0f;
   pumpCalibrated = false;
@@ -153,6 +185,23 @@ int getMlPerLiterForStage(plantStage stage) {
       return mlFin;
     default:
       return mlVeg;
+  }
+}
+
+int getLightHoursForStage(plantStage stage) {
+  switch (stage) {
+    case PLANTULA:
+      return lightHoursPl;
+    case VEGETATIVO:
+      return lightHoursVeg;
+    case PRE_FLORACION:
+      return lightHoursPre;
+    case FLORACION:
+      return lightHoursFlo;
+    case FINAL:
+      return lightHoursFin;
+    default:
+      return lightHoursVeg;
   }
 }
 
@@ -277,4 +326,29 @@ void setLastIrrigationEpoch(unsigned long epochSeconds) {
   lastIrrigationEpoch = epochSeconds;
   ensurePrefs();
   irrigationPrefs.putULong("lastIr", lastIrrigationEpoch);
+}
+
+bool setLightHoursForStage(plantStage stage, int hours) {
+  if (hours < 1 || hours > 24) {
+    return false;
+  }
+
+  ensurePrefs();
+  switch (stage) {
+    case PLANTULA:
+      lightHoursPl = hours;
+      irrigationPrefs.putInt("lh_pl", lightHoursPl);
+      break;
+    case VEGETATIVO:
+      lightHoursVeg = hours;
+      irrigationPrefs.putInt("lh_veg", lightHoursVeg);
+      break;
+    case PRE_FLORACION:
+    case FLORACION:
+    case FINAL:
+    default:
+      return false;
+  }
+
+  return true;
 }
