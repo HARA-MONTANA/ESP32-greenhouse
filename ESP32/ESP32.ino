@@ -48,6 +48,7 @@ bool alertMqSent = false;
 bool awaitingCalibrationVolume = false;
 bool fanAuto = true;
 int fanPercent = 0;
+int fanLastAppliedPercent = -1;
 
 std::vector<String> authorizedChatIds;
 
@@ -57,6 +58,14 @@ WiFiClientSecure telegramClient;
 UniversalTelegramBot *telegramBot = nullptr;
 RTC_DS3231 rtc;
 bool rtcReady = false;
+const int LIGHTS_ON_HOUR = 6;
+const int LIGHTS_ON_MINUTE = 0;
+unsigned long lastLightCheckMs = 0;
+const int FAN_PWM_CHANNEL = 0;
+const int FAN_PWM_FREQ = 25000;
+const int FAN_PWM_RES_BITS = 8;
+const int FAN_PWM_MAX_DUTY = (1 << FAN_PWM_RES_BITS) - 1;
+unsigned long lastFanUpdateMs = 0;
 String lastTelegramChatId;
 DHT dht(PIN_DHT, DHT22);
 float lastDhtTempC = NAN;
@@ -81,6 +90,13 @@ bool syncTimeWithOffset(int offsetHours = -5, unsigned long maxWaitMs = 60000);
 bool verifyTelegramToken(uint8_t maxAttempts = 5, uint16_t retryDelayMs = 1000);
 void loadRuntimeSettings();
 void saveRuntimeSettings();
+String formatLightsOffTime();
+int getLightHoursForStage(plantStage stage);
+int getLightsOffMinutesOfDay(plantStage stage);
+void applyLightSchedule();
+void initFanPwm();
+int computeAutoFanPercent();
+void updateFanControl(bool forceApply = false);
 
 
 // =========================================================
@@ -159,6 +175,63 @@ bool readAmbient(float &tempC, float &humidity) {
   lastDhtReadMs = now;
   lastDhtValid = true;
   return true;
+}
+
+void initFanPwm() {
+  ledcSetup(FAN_PWM_CHANNEL, FAN_PWM_FREQ, FAN_PWM_RES_BITS);
+  ledcAttachPin(PIN_FAN_PWM, FAN_PWM_CHANNEL);
+  ledcWrite(FAN_PWM_CHANNEL, 0);
+  fanLastAppliedPercent = 0;
+  lastFanUpdateMs = millis();
+}
+
+int computeAutoFanPercent() {
+  float tempC = NAN;
+  float rh = NAN;
+  const bool ambientOk = readAmbient(tempC, rh);
+  const int mqReading = analogRead(PIN_MQ135);
+
+  int tempPct = 0;
+  if (ambientOk && tempAlertThreshold > 0) {
+    const float coolStart = 24.0f;
+    const float fullSpeedTemp = max(coolStart + 1.0f, static_cast<float>(tempAlertThreshold));
+
+    if (tempC <= coolStart) {
+      tempPct = 0;
+    } else if (tempC >= fullSpeedTemp) {
+      tempPct = 100;
+    } else {
+      const float ratio = (tempC - coolStart) / (fullSpeedTemp - coolStart);
+      tempPct = constrain(static_cast<int>(ratio * 100.0f + 0.5f), 0, 100);
+    }
+  }
+
+  int mqPct = 0;
+  const int mqStart = max(0, mqAlertThreshold - 50);
+  const int mqMax = min(4095, mqAlertThreshold + 400);
+  if (mqReading >= mqStart) {
+    if (mqReading >= mqMax) {
+      mqPct = 100;
+    } else {
+      mqPct = map(mqReading, mqStart, mqMax, 0, 100);
+    }
+  }
+
+  return max(tempPct, mqPct);
+}
+
+void updateFanControl(bool forceApply) {
+  int targetPercent = fanAuto ? computeAutoFanPercent() : fanPercent;
+  targetPercent = constrain(targetPercent, 0, 100);
+
+  const unsigned long now = millis();
+  if (forceApply || targetPercent != fanLastAppliedPercent) {
+    const int duty = map(targetPercent, 0, 100, 0, FAN_PWM_MAX_DUTY);
+    ledcWrite(FAN_PWM_CHANNEL, duty);
+    fanLastAppliedPercent = targetPercent;
+    fanPercent = targetPercent;
+    lastFanUpdateMs = now;
+  }
 }
 
 String promptOrStoredValue(const char *label, const String &storedValue, uint32_t timeoutMs) {
@@ -300,6 +373,7 @@ String formatIrrigationConfig() {
   msg += "Umbral suelo: " + String(getSoilThreshold()) + "%\n";
   msg += "Umbral humedad alta: " + String(getSoilHighThreshold()) + "%\n";
   msg += "Dias entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
+  msg += "Luces se apagan a las: " + formatLightsOffTime() + "\n";
   msg += "Hora local: " + nowStr;
   return msg;
 }
@@ -332,7 +406,7 @@ String formatStatus() {
   }
   msg += "Suelo|PWM: " + String(soilPercent) + "% (" + String(soilAdc) + ") | " + String(fanPercent) + "%\n";
   msg += "AGUA: " + String(waterAvailable ? "SI" : "NO") + "\n";
-  msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") + " | mL: " + String(stageMl, 1) + "\n";
+  msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") + " (OFF " + formatLightsOffTime() + ") | mL: " + String(stageMl, 1) + "\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
   msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
   msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") + " | FAN: " + String(fanAuto ? "AUTO" : "MANUAL") + "\n";
@@ -528,6 +602,23 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       updated = true;
       return "Intervalo mínimo entre riegos actualizado a " + String(days) + " días";
     }
+  } else if (lower.startsWith("luz")) {
+    int firstSpace = lower.indexOf(' ');
+    int secondSpace = lower.indexOf(' ', firstSpace + 1);
+    if (firstSpace > 0 && secondSpace > firstSpace) {
+      String stageToken = lower.substring(firstSpace + 1, secondSpace);
+      String valueToken = lower.substring(secondSpace + 1);
+      plantStage stage = stageFromString(stageToken);
+      int hours = valueToken.toInt();
+      if (stage == PRE_FLORACION || stage == FLORACION || stage == FINAL) {
+        return "Pre-floración, floración y final están fijas en 12 h y no se pueden editar.";
+      }
+      if (!setLightHoursForStage(stage, hours)) {
+        return "Horas de luz fuera de rango (1-24 h) para plántula/vegetativo.";
+      }
+      updated = true;
+      return "Horas de luz actualizadas para etapa " + stageToken + ": " + String(hours) + " h";
+    }
   } else if (lower == "reset") {
     configReset();
     updated = true;
@@ -536,7 +627,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
     return formatIrrigationConfig();
   }
 
-  return "Comandos: stage <etapa>, ml <etapa> <valor>, pot <L>, flow <mL/s>, soil <pct>, soilmax <pct>, interval <dias>, status, reset, show";
+  return "Comandos: stage <etapa>, ml <etapa> <valor>, luz <plantula|vegetativo> <horas>, pot <L>, flow <mL/s>, soil <pct>, soilmax <pct>, interval <dias>, status, reset, show";
 }
 
 void handleSerialCommands() {
@@ -591,7 +682,7 @@ String commandHelp() {
   help += "/start, /status, /maceta [L], /etapa [plantula|vegetativo|pre-floracion|floracion|final]\n";
   help += "/cal_suelo [SECO] [HUMEDO], /alerta_suelo [%], /umbral_suelo [%], /intervalo_riego [dias]\n";
   help += "/alerta_temp_alta [C], /alerta_rh_baja [%], /alerta_rh_alta [%], /alerta_mq [N]\n";
-  help += "/mostrar_conf_riego\n";
+  help += "/mostrar_conf_riego, /luz [plantula|vegetativo] [horas]\n";
   help += "/calibrar [mL], /riego_auto [on|off], /regar [mL]\n";
   help += "/fanauto [on|off], /fan [0-100]\n";
   help += "/autolecturas [on|off] [min]\n";
@@ -636,6 +727,20 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     updateStage(stageFromString(args));
     updatedConfig = true;
     return "Etapa cambiada a " + args;
+  }
+
+  if (base == "/luz") {
+    int spaceIdx = args.indexOf(' ');
+    if (spaceIdx == -1) return "Uso: /luz [etapa] [horas]";
+    String stageToken = args.substring(0, spaceIdx);
+    int hours = args.substring(spaceIdx + 1).toInt();
+    plantStage stage = stageFromString(stageToken);
+    if (stage == PRE_FLORACION || stage == FLORACION || stage == FINAL) {
+      return "Pre-floración, floración y final están fijas en 12 h y no se pueden editar.";
+    }
+    if (!setLightHoursForStage(stage, hours)) return "Horas de luz inválidas (1-24 h) para plántula/vegetativo.";
+    updatedConfig = true;
+    return "Horas de luz para " + stageToken + ": " + String(hours) + " h";
   }
 
   if (base == "/cal_suelo") {
@@ -738,6 +843,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
 
   if (base == "/fanauto") {
     fanAuto = parseOnOff(args);
+    updateFanControl(true);
     return String("Control automático de ventilador ") + (fanAuto ? "ON" : "OFF");
   }
 
@@ -746,6 +852,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     pct = constrain(pct, 0, 100);
     fanPercent = pct;
     fanAuto = false;
+    updateFanControl(true);
     return "Ventilador en manual a " + String(pct) + "%";
   }
 
@@ -800,6 +907,43 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   }
 
   return "Comando no reconocido. Usa /start para ayuda.";
+}
+
+int getLightsOffMinutesOfDay(plantStage stage) {
+  const int totalMinutes = LIGHTS_ON_HOUR * 60 + LIGHTS_ON_MINUTE + getLightHoursForStage(stage) * 60;
+  return totalMinutes % (24 * 60);
+}
+
+String formatLightsOffTime() {
+  const int offMinutes = getLightsOffMinutesOfDay(getCurrentStage());
+  const int offHour = offMinutes / 60;
+  const int offMinute = offMinutes % 60;
+  char buffer[6];
+  snprintf(buffer, sizeof(buffer), "%02d:%02d", offHour, offMinute);
+  return String(buffer);
+}
+
+void applyLightSchedule() {
+  struct tm nowInfo;
+  if (!getLocalTime(&nowInfo)) {
+    return;
+  }
+
+  struct tm startInfo = nowInfo;
+  startInfo.tm_hour = LIGHTS_ON_HOUR;
+  startInfo.tm_min = LIGHTS_ON_MINUTE;
+  startInfo.tm_sec = 0;
+
+  const time_t nowTs = mktime(&nowInfo);
+  const time_t startTs = mktime(&startInfo);
+  const time_t offTs = startTs + getLightHoursForStage(getCurrentStage()) * 3600L;
+
+  const bool shouldBeOn = nowTs >= startTs && nowTs < offTs;
+  const int desiredLevel = shouldBeOn ? LOW : HIGH;
+
+  if (digitalRead(PIN_RELE2) != desiredLevel) {
+    digitalWrite(PIN_RELE2, desiredLevel);
+  }
 }
 
 void pollTelegram() {
@@ -1195,6 +1339,7 @@ void setup() {
   configLoad();
   loadRuntimeSettings();
   initIrrigationHardware();
+  initFanPwm();
   pinMode(PIN_RELE2, OUTPUT);
   digitalWrite(PIN_RELE2, HIGH);
 
@@ -1215,6 +1360,10 @@ void setup() {
   //  SINCRONIZAR HORA NTP (IMPORTANTE PARA TLS)
   // -------------------------------------------------------
   ensureTimeReady(timezoneOffsetHours);
+
+  // Inicializar el estado de las luces según el horario configurado.
+  applyLightSchedule();
+  updateFanControl(true);
 
   // -------------------------------------------------------
   //  CONFIGURAR CLIENTE SEGURO PARA TELEGRAM
@@ -1242,6 +1391,15 @@ void loop() {
   sendPeriodicStatusIfNeeded();
 
   const unsigned long now = millis();
+
+  if (now - lastLightCheckMs >= 10000) {
+    lastLightCheckMs = now;
+    applyLightSchedule();
+  }
+
+  if (now - lastFanUpdateMs >= 2000) {
+    updateFanControl();
+  }
 
   if (now - lastSoilCheckMs >= 2000) {
     lastSoilCheckMs = now;
