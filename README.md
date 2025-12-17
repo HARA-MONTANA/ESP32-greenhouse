@@ -25,28 +25,37 @@ Dependencias Arduino principales (instalables desde el Gestor de Librerías):
 
 ## Comandos de Telegram
 
-El bot expone los siguientes comandos con el formato `/comando [obligatorio] {opcional}`. Los valores configurados se guardan en la
-NVS para conservarse tras reinicios (incluyendo los umbrales de alertas y la calibración seco/húmedo del sensor de suelo).
+El bot expone los siguientes comandos con el formato `/comando [obligatorio] [opcional]`. Los valores configurados se guardan en la NVS para conservarse tras reinicios (incluyendo umbrales de alertas, calibración del sensor de suelo y caudal de la bomba).
+
+**Comandos de uso común**
 
 - `/start` - Muestra el resumen de ayuda con todos los comandos.
-- `/status` - Devuelve el estado actual (temperatura, humedad relativa, suelo, agua, etapa, etc.).
+- `/estado` - Devuelve el estado actual (temperatura, humedad relativa, suelo, agua, etapa, etc.).
+- `/riego_auto [on|off]` - Consulta o cambia el estado del riego automático.
+- `/regar [mL]` - Ejecuta un riego manual con el volumen indicado (hasta 1500 mL).
+- `/vent_auto [on|off]` - Activa o desactiva el control automático del ventilador.
+- `/vent [0-100]` - Ajusta el ventilador en modo manual al porcentaje indicado.
+- `/reportes [on|off] [min]` - Activa/desactiva y, opcionalmente, define el intervalo de envíos automáticos de estado en minutos.
+
+**Comandos de configuración**
+
+- `/ajustes` - Muestra la configuración completa de riego (maceta, etapa, umbrales, intervalos, etc.).
 - `/maceta [litros]` - Define el volumen de la maceta (1-50 L).
 - `/etapa [plantula|vegetativo|pre-floracion|floracion|final]` - Cambia la etapa de cultivo para ajustar riegos y alertas.
-- `/cal_suelo [SECO] [HUMEDO]` - Calibra el sensor de suelo con lecturas ADC para seco y húmedo.
-- `/alerta_suelo [porcentaje]` - Ajusta el umbral de humedad alta en suelo (50-100%).
-- `/umbral_suelo [porcentaje]` - Ajusta el umbral mínimo de humedad en suelo (0-50%).
-- `/intervalo_riego [dias]` - Fija el intervalo mínimo entre riegos automáticos (1-5 días).
-- `/alerta_temp_alta [C]` - Configura el umbral de alerta por temperatura alta.
-- `/alerta_rh_baja [%]` - Configura la alerta de humedad relativa baja (activa solo en plántula y vegetativo).
-- `/alerta_rh_alta [%]` - Configura la alerta de humedad relativa alta (activa en pre-floración, floración y final).
-- `/alerta_mq [ADC]` - Configura el umbral del sensor MQ para alertar aire pobre.
-- `/mostrar_conf_riego` - Muestra la configuración completa de riego.
-- `/calibrar {mL}` - Activa la bomba 5 s y, si se envía un valor, establece el caudal en mL/s según el volumen medido.
-- `/riego_auto [on|off]` - Consulta o cambia el estado del riego automático.
-- `/regar [mL]` - Ejecuta un riego manual con el volumen indicado.
-- `/fanauto [on|off]` - Activa o desactiva el control automático del ventilador.
-- `/fan [0-100]` - Ajusta el ventilador en modo manual al porcentaje indicado.
-- `/autolecturas [on|off] {min}` - Activa/desactiva y ajusta el intervalo de envíos automáticos de estado.
-- `/addid [ID]` - Autoriza un nuevo ID de chat para recibir mensajes.
+- `/horas_luz [plantula|vegetativo] [horas]` - Ajusta las horas de luz para plántula o vegetativo (1-24 h). Las demás etapas quedan fijas en 12 h.
+- `/suelo_cal [SECO] [HUMEDO]` - Calibra el sensor de suelo con lecturas ADC para seco y húmedo.
+- `/suelo_min [%]` - Ajusta el umbral mínimo de humedad en suelo (0-50%).
+- `/suelo_max [%]` - Ajusta el umbral de humedad alta en suelo (50-100%).
+- `/pausa_riego [dias]` - Fija el intervalo mínimo entre riegos automáticos (1-5 días).
+- `/temp_max [C]` - Configura el umbral de alerta por temperatura alta.
+- `/hum_min [%]` - Configura la alerta de humedad relativa baja (activa solo en plántula y vegetativo).
+- `/hum_max [%]` - Configura la alerta de humedad relativa alta (activa en pre-floración, floración y final).
+- `/aire_max [N]` - Configura el umbral del sensor MQ para alertar aire pobre.
+- `/calibrar` - Activa la bomba durante 5 segundos para medir manualmente el volumen entregado.
+- `/caudal [mL]` - Guarda el caudal en mL/s usando el volumen medido tras `/calibrar`.
+
+**Administración de IDs**
+
+- `/addid [ID]` - Autoriza un nuevo ID de chat para recibir mensajes (máximo 5).
 - `/delid [ID]` - Elimina un ID autorizado.
 - `/ids` - Lista los IDs de chat autorizados actualmente.
