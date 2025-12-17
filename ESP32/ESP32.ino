@@ -678,14 +678,18 @@ bool parseOnOff(const String &value) {
 
 String commandHelp() {
   String help;
-  help += "Comandos disponibles:\n";
-  help += "/start, /status, /maceta [L], /etapa [plantula|vegetativo|pre-floracion|floracion|final]\n";
-  help += "/cal_suelo [SECO] [HUMEDO], /alerta_suelo [%], /umbral_suelo [%], /intervalo_riego [dias]\n";
-  help += "/alerta_temp_alta [C], /alerta_rh_baja [%], /alerta_rh_alta [%], /alerta_mq [N]\n";
-  help += "/mostrar_conf_riego, /luz [plantula|vegetativo] [horas]\n";
-  help += "/calibrar [mL], /riego_auto [on|off], /regar [mL]\n";
-  help += "/fanauto [on|off], /fan [0-100]\n";
-  help += "/autolecturas [on|off] [min]\n";
+  help += "Comandos de uso común:\n";
+  help += "/start, /estado\n";
+  help += "/regar [mL], /riego_auto [on|off]\n";
+  help += "/reportes [on|off] [min]\n";
+  help += "/vent_auto [on|off], /vent [0-100]\n";
+  help += "\nComandos de configuración:\n";
+  help += "/ajustes\n";
+  help += "/maceta [L], /etapa [plantula|vegetativo|pre-floracion|floracion|final], /horas_luz [etapa] [horas]\n";
+  help += "/suelo_cal [SECO] [HUMEDO], /suelo_min [%], /suelo_max [%], /pausa_riego [dias]\n";
+  help += "/temp_max [C], /hum_min [%], /hum_max [%], /aire_max [N]\n";
+  help += "/calibrar, /caudal [mL]\n";
+  help += "\nAdministración:\n";
   help += "/addid [ID], /delid [ID], /ids";
   return help;
 }
@@ -710,7 +714,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     return "Chat no autorizado (máx 5 IDs).";
   }
 
-  if (base == "/status") {
+  if (base == "/estado") {
     return formatStatus();
   }
 
@@ -729,9 +733,9 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     return "Etapa cambiada a " + args;
   }
 
-  if (base == "/luz") {
+  if (base == "/horas_luz") {
     int spaceIdx = args.indexOf(' ');
-    if (spaceIdx == -1) return "Uso: /luz [etapa] [horas]";
+    if (spaceIdx == -1) return "Uso: /horas_luz [etapa] [horas]";
     String stageToken = args.substring(0, spaceIdx);
     int hours = args.substring(spaceIdx + 1).toInt();
     plantStage stage = stageFromString(stageToken);
@@ -743,9 +747,9 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     return "Horas de luz para " + stageToken + ": " + String(hours) + " h";
   }
 
-  if (base == "/cal_suelo") {
+  if (base == "/suelo_cal") {
     int space2 = args.indexOf(' ');
-    if (space2 == -1) return "Uso: /cal_suelo [SECO] [HUMEDO]";
+    if (space2 == -1) return "Uso: /suelo_cal [SECO] [HUMEDO]";
     soilDryAdc = constrain(args.substring(0, space2).toInt(), 0, 4095);
     soilWetAdc = constrain(args.substring(space2 + 1).toInt(), 0, 4095);
     if (soilDryAdc <= soilWetAdc) {
@@ -755,75 +759,75 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     return "Calibración suelo actualizada. Seco=" + String(soilDryAdc) + " húmedo=" + String(soilWetAdc);
   }
 
-  if (base == "/alerta_suelo") {
+  if (base == "/suelo_max") {
     int pct = args.toInt();
-    if (pct <= 0) return "Uso: /alerta_suelo [%]";
+    if (pct <= 0) return "Uso: /suelo_max [%]";
     if (!setSoilHighThreshold(pct)) return "Umbral de humedad alta inválido (50-100%).";
     updatedConfig = true;
     return "Umbral de humedad alta fijado en " + String(pct) + "%";
   }
 
-  if (base == "/umbral_suelo") {
+  if (base == "/suelo_min") {
     int pct = args.toInt();
-    if (pct <= 0) return "Uso: /umbral_suelo [%]";
+    if (pct <= 0) return "Uso: /suelo_min [%]";
     if (!setSoilThreshold(pct)) return "Umbral de suelo inválido (0-50%).";
     updatedConfig = true;
     return "Umbral mínimo de humedad fijado en " + String(pct) + "%";
   }
 
-  if (base == "/intervalo_riego") {
+  if (base == "/pausa_riego") {
     int days = args.toInt();
-    if (days <= 0) return "Uso: /intervalo_riego [dias]";
+    if (days <= 0) return "Uso: /pausa_riego [dias]";
     if (!setIrrigationIntervalDays(days)) return "Intervalo entre riegos inválido (1-5 días).";
     updatedConfig = true;
     return "Intervalo entre riegos fijado en " + String(days) + " días";
   }
 
-  if (base == "/alerta_temp_alta") {
+  if (base == "/temp_max") {
     int val = args.toInt();
-    if (val <= 0) return "Uso: /alerta_temp_alta [C]";
+    if (val <= 0) return "Uso: /temp_max [C]";
     tempAlertThreshold = constrain(val, 1, 100);
     updatedConfig = true;
     return "Umbral temp alta: " + String(tempAlertThreshold) + " C";
   }
 
-  if (base == "/alerta_rh_baja") {
+  if (base == "/hum_min") {
     int val = args.toInt();
-    if (val <= 0) return "Uso: /alerta_rh_baja [%]";
+    if (val <= 0) return "Uso: /hum_min [%]";
     rhLowAlertThreshold = constrain(val, 1, 100);
     updatedConfig = true;
     return "Umbral humedad ambiente baja: " + String(rhLowAlertThreshold) + "%";
   }
 
-  if (base == "/alerta_rh_alta") {
+  if (base == "/hum_max") {
     int val = args.toInt();
-    if (val <= 0) return "Uso: /alerta_rh_alta [%]";
+    if (val <= 0) return "Uso: /hum_max [%]";
     rhHighAlertThreshold = constrain(val, 1, 100);
     updatedConfig = true;
     return "Umbral humedad ambiente alta: " + String(rhHighAlertThreshold) + "%";
   }
 
-  if (base == "/alerta_mq") {
+  if (base == "/aire_max") {
     int val = args.toInt();
-    if (val <= 0) return "Uso: /alerta_mq [N]";
+    if (val <= 0) return "Uso: /aire_max [N]";
     mqAlertThreshold = max(val, 1);
     updatedConfig = true;
     return "Umbral MQ: " + String(mqAlertThreshold);
   }
 
-  if (base == "/mostrar_conf_riego") {
+  if (base == "/ajustes") {
     return formatIrrigationConfig();
   }
 
   if (base == "/calibrar") {
-    if (args.isEmpty()) {
-      awaitingCalibrationVolume = true;
-      digitalWrite(PIN_RELE1, LOW);
-      delay(5000);
-      digitalWrite(PIN_RELE1, HIGH);
-      return "Bomba activada 5s. Envía /calibrar [mL] con el volumen medido.";
-    }
+    awaitingCalibrationVolume = true;
+    digitalWrite(PIN_RELE1, LOW);
+    delay(5000);
+    digitalWrite(PIN_RELE1, HIGH);
+    return "Bomba activada 5s. Envía /caudal [mL] con el volumen medido.";
+  }
 
+  if (base == "/caudal") {
     float measuredMl = args.toFloat();
     if (measuredMl <= 0) return "Envía el volumen medido en mL.";
     float newFlow = measuredMl / 5.0f;
@@ -841,13 +845,13 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     return String("Riego automático ") + (isAutoIrrigationEnabled() ? "activado" : "desactivado");
   }
 
-  if (base == "/fanauto") {
+  if (base == "/vent_auto") {
     fanAuto = parseOnOff(args);
     updateFanControl(true);
     return String("Control automático de ventilador ") + (fanAuto ? "ON" : "OFF");
   }
 
-  if (base == "/fan") {
+  if (base == "/vent") {
     int pct = args.toInt();
     pct = constrain(pct, 0, 100);
     fanPercent = pct;
@@ -860,13 +864,13 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     float ml = args.toFloat();
     if (ml <= 0) return "Uso: /regar [mL]";
     ml = min(ml, 1500.0f);
-    if (!isPumpCalibrated()) return "Bomba sin calibrar. Ejecuta /calibrar antes de regar.";
+    if (!isPumpCalibrated()) return "Bomba sin calibrar. Ejecuta /caudal antes de regar.";
     irrigateVolume(ml, readSoilMoisture());
     return "Riego manual por " + String(ml) + " mL";
   }
 
-  if (base == "/autolecturas") {
-    if (args.isEmpty()) return String("Autolecturas ") + (autoReadingsEnabled ? "ON" : "OFF");
+  if (base == "/reportes") {
+    if (args.isEmpty()) return String("Reportes ") + (autoReadingsEnabled ? "ON" : "OFF");
     int spaceArg = args.indexOf(' ');
     String flag = spaceArg == -1 ? args : args.substring(0, spaceArg);
     String minutesStr = spaceArg == -1 ? "" : args.substring(spaceArg + 1);
@@ -875,7 +879,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
       int mins = minutesStr.toInt();
       if (mins > 0) autoReadingsIntervalMs = mins * 60000UL;
     }
-    return String("Autolecturas ") + (autoReadingsEnabled ? "activadas" : "desactivadas");
+    return String("Reportes ") + (autoReadingsEnabled ? "activados" : "desactivados");
   }
 
   if (base == "/addid") {
