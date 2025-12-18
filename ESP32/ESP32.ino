@@ -536,6 +536,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       updated = true;
       return "Etapa actualizada a " + stageToken;
     }
+    return "Etapas disponibles: plantula (pl), vegetativo (veg), pre-floracion (pre), floracion (flo), final (fin). Usa: stage <etapa>";
   } else if (lower == "status") {
     return formatStatus();
   } else if (lower.startsWith("ml")) {
@@ -623,12 +624,12 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
     configReset();
     updated = true;
     return "Configuración de riego restablecida a valores por defecto.";
-  } else if (lower == "show") {
-    return formatIrrigationConfig();
-  }
+    } else if (lower == "conf") {
+      return formatIrrigationConfig();
+    }
 
-  return "Comandos: stage <etapa>, ml <etapa> <valor>, luz <plantula|vegetativo> <horas>, pot <L>, flow <mL/s>, soil <pct>, soilmax <pct>, interval <dias>, status, reset, show";
-}
+    return "Comandos: stage <plantula|vegetativo|pre-floracion|floracion|final>, ml <etapa> <valor>, luz <plantula|vegetativo> <horas>, pot <L>, flow <mL/s>, soil <pct>, soilmax <pct>, interval <dias>, status, reset, conf";
+  }
 
 void handleSerialCommands() {
   if (!Serial.available()) {
