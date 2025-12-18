@@ -54,6 +54,9 @@ std::vector<String> authorizedChatIds;
 
 bool telegramEnabled = false;
 
+enum ReportFormat { REPORT_COMPACT = 0, REPORT_FULL = 1 };
+ReportFormat reportFormat = REPORT_COMPACT;
+
 WiFiClientSecure telegramClient;
 UniversalTelegramBot *telegramBot = nullptr;
 RTC_DS3231 rtc;
@@ -282,6 +285,13 @@ void loadRuntimeSettings() {
   rhLowAlertThreshold = constrain(settingsStore.getInt("rhLow", rhLowAlertThreshold), 1, 100);
   rhHighAlertThreshold = constrain(settingsStore.getInt("rhHigh", rhHighAlertThreshold), 1, 100);
   mqAlertThreshold = max(settingsStore.getInt("mqTh", mqAlertThreshold), 1);
+
+  autoReadingsEnabled = settingsStore.getBool("autoRpt", autoReadingsEnabled);
+  autoReadingsIntervalMs = settingsStore.getUInt("autoInt", autoReadingsIntervalMs);
+  autoReadingsIntervalMs = max(autoReadingsIntervalMs, 60000UL);
+
+  int storedFormat = settingsStore.getInt("repFmt", static_cast<int>(reportFormat));
+  reportFormat = storedFormat == static_cast<int>(REPORT_FULL) ? REPORT_FULL : REPORT_COMPACT;
 }
 
 void saveRuntimeSettings() {
@@ -293,6 +303,9 @@ void saveRuntimeSettings() {
   settingsStore.putInt("rhLow", rhLowAlertThreshold);
   settingsStore.putInt("rhHigh", rhHighAlertThreshold);
   settingsStore.putInt("mqTh", mqAlertThreshold);
+  settingsStore.putBool("autoRpt", autoReadingsEnabled);
+  settingsStore.putUInt("autoInt", autoReadingsIntervalMs);
+  settingsStore.putInt("repFmt", static_cast<int>(reportFormat));
 }
 
 plantStage stageFromString(const String &value) {
@@ -335,6 +348,23 @@ String stageToString(plantStage stage) {
   }
 }
 
+String stageToCode(plantStage stage) {
+  switch (stage) {
+    case PLANTULA:
+      return "P";
+    case VEGETATIVO:
+      return "V";
+    case PRE_FLORACION:
+      return "PF";
+    case FLORACION:
+      return "F";
+    case FINAL:
+      return "FN";
+    default:
+      return "?";
+  }
+}
+
 String formatLastIrrigation() {
   const unsigned long lastEpoch = getLastIrrigationEpoch();
   if (lastEpoch == 0) {
@@ -349,6 +379,23 @@ String formatLastIrrigation() {
 
   char buffer[20];
   strftime(buffer, sizeof(buffer), "%H:%M %d/%m/%Y", &timeinfo);
+  return String(buffer);
+}
+
+String formatShortLastIrrigation() {
+  const unsigned long lastEpoch = getLastIrrigationEpoch();
+  if (lastEpoch == 0) {
+    return "Sin registro";
+  }
+
+  struct tm timeinfo;
+  time_t ts = static_cast<time_t>(lastEpoch);
+  if (localtime_r(&ts, &timeinfo) == nullptr) {
+    return "Sin registro";
+  }
+
+  char buffer[12];
+  strftime(buffer, sizeof(buffer), "%H:%M %d/%m", &timeinfo);
   return String(buffer);
 }
 
@@ -393,28 +440,65 @@ String formatStatus() {
   float ambientRh = NAN;
   bool ambientOk = readAmbient(ambientTemp, ambientRh);
 
+  const int mqReading = analogRead(PIN_MQ135);
   const int soilAdc = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilAdc);
   const bool waterAvailable = isTankWaterAvailable();
   const float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
+
+  String stageStr = stageToString(getCurrentStage());
+  stageStr.toUpperCase();
+
+  String msg;
+  msg += "Temperatura: ";
+  msg += ambientOk ? String(ambientTemp, 1) + "°C" : "N/D";
+  msg += " | Humedad Relativa: ";
+  msg += ambientOk ? String(ambientRh, 0) + "%" : "N/D";
+  msg += " | MQ: " + String(mqReading) + "\n";
+
+  msg += "Humedad del suelo: " + String(soilPercent) + "% (ADC: " + String(soilAdc) + ") | FAN: " + String(fanPercent) + "% [" +
+         String(fanAuto ? "AUTO" : "MANUAL") + "] \n";
+
+  msg += "Etapa: [" + stageStr + "] | Luz: [" + String(areLightsOn() ? "ON" : "OFF") + "] (OFF [" + formatLightsOffTime() + "]) | Agua: [" +
+         String(waterAvailable ? "SI" : "NO") + "]\n";
+
+  msg += "Ultimo riego: " + formatLastIrrigation() + "  | mL: [" + String(stageMl, 0) + "] mL\n";
+
+  msg += "Riego: [" + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") + "] | Autolecturas: [" +
+         String(autoReadingsEnabled ? "ON" : "OFF") + "]";
+  return msg;
+}
+
+String formatCompactReport() {
+  float ambientTemp = NAN;
+  float ambientRh = NAN;
+  bool ambientOk = readAmbient(ambientTemp, ambientRh);
+
+  const int mqReading = analogRead(PIN_MQ135);
+  const int soilAdc = readSoilMoisture();
+  const int soilPercent = soilPercentFromAdc(soilAdc);
+  const bool waterAvailable = isTankWaterAvailable();
+  const float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
+
   String msg;
   msg += "==GH==\n";
   if (ambientOk) {
-    msg += "T|H: " + String(ambientTemp, 1) + "°C | " + String(ambientRh, 0) + "%\n";
+    msg += "T:" + String(ambientTemp, 0) + "°C HR:" + String(ambientRh, 0) + "% MQ:" + String(mqReading) + "\n";
   } else {
-    msg += "T|H: N/D\n";
+    msg += "T:N/D HR:N/D MQ:" + String(mqReading) + "\n";
   }
-  msg += "Suelo|PWM: " + String(soilPercent) + "% (" + String(soilAdc) + ") | " + String(fanPercent) + "%\n";
-  msg += "AGUA: " + String(waterAvailable ? "SI" : "NO") + "\n";
-  msg += "Luces: " + String(areLightsOn() ? "ON" : "OFF") + " (OFF " + formatLightsOffTime() + ") | mL: " + String(stageMl, 1) + "\n";
-  msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
-  msg += "Ult. Riego: " + formatLastIrrigation() + "\n";
-  msg += "Riego: " + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") + " | FAN: " + String(fanAuto ? "AUTO" : "MANUAL") + "\n";
-  msg += "AutoLect: ";
-  msg +=
-      autoReadingsEnabled ? String(autoReadingsIntervalMs / 60000) + " min\n" : String("OFF\n");
+
+  msg += "Soil: " + String(soilPercent) + "% FAN: " + String(fanPercent) + "% " + String(fanAuto ? "A" : "M") + "\n";
+
+  msg += "E:" + stageToCode(getCurrentStage()) + " L:" + String(areLightsOn() ? "ON" : "OFF") + " A:" + String(waterAvailable ? "SI" : "NO") +
+         "  mL:" + String(stageMl, 0) + " \n";
+
+  msg += formatShortLastIrrigation();
   return msg;
 }
+
+String formatReportMessage() { return reportFormat == REPORT_COMPACT ? formatCompactReport() : formatStatus(); }
+
 
 bool stageSupportsLowRhAlerts(plantStage stage) {
   return stage == PLANTULA || stage == VEGETATIVO;
@@ -677,12 +761,29 @@ bool parseOnOff(const String &value) {
   return lower == "on" || lower == "1" || lower == "true";
 }
 
+bool applyReportFormatToken(const String &value) {
+  String lower = value;
+  lower.toLowerCase();
+
+  if (lower == "compact") {
+    reportFormat = REPORT_COMPACT;
+    return true;
+  }
+
+  if (lower == "all" || lower == "todo" || lower == "full") {
+    reportFormat = REPORT_FULL;
+    return true;
+  }
+
+  return false;
+}
+
 String commandHelp() {
   String help;
   help += "Comandos de uso común:\n";
   help += "/start, /estado\n";
   help += "/regar [mL], /riego_auto [on|off]\n";
-  help += "/reportes [on|off] [min]\n";
+  help += "/reportes [on|off] [min] [Compact|All]\n";
   help += "/vent_auto [on|off], /vent [0-100]\n";
   help += "\nComandos de configuración:\n";
   help += "/ajustes\n";
@@ -871,16 +972,47 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   }
 
   if (base == "/reportes") {
-    if (args.isEmpty()) return String("Reportes ") + (autoReadingsEnabled ? "ON" : "OFF");
-    int spaceArg = args.indexOf(' ');
-    String flag = spaceArg == -1 ? args : args.substring(0, spaceArg);
-    String minutesStr = spaceArg == -1 ? "" : args.substring(spaceArg + 1);
-    autoReadingsEnabled = parseOnOff(flag);
-    if (!minutesStr.isEmpty()) {
-      int mins = minutesStr.toInt();
-      if (mins > 0) autoReadingsIntervalMs = mins * 60000UL;
+    if (args.isEmpty()) {
+      String summary = String("Reportes ") + (autoReadingsEnabled ? "ON" : "OFF");
+      summary += " cada " + String(autoReadingsIntervalMs / 60000) + " min";
+      summary += " (" + String(reportFormat == REPORT_COMPACT ? "Compact" : "All") + ")";
+      return summary;
     }
-    return String("Reportes ") + (autoReadingsEnabled ? "activados" : "desactivados");
+
+    std::vector<String> parts;
+    int startIdx = 0;
+    while (startIdx < args.length()) {
+      int spaceIdx = args.indexOf(' ', startIdx);
+      if (spaceIdx == -1) spaceIdx = args.length();
+      String token = args.substring(startIdx, spaceIdx);
+      token.trim();
+      if (!token.isEmpty()) {
+        parts.push_back(token);
+      }
+      startIdx = spaceIdx + 1;
+    }
+
+    if (!parts.empty()) {
+      autoReadingsEnabled = parseOnOff(parts[0]);
+    }
+
+    if (parts.size() >= 2) {
+      if (!applyReportFormatToken(parts[1])) {
+        int mins = parts[1].toInt();
+        if (mins > 0) autoReadingsIntervalMs = mins * 60000UL;
+      }
+    }
+
+    if (parts.size() >= 3) {
+      applyReportFormatToken(parts[2]);
+    }
+
+    saveRuntimeSettings();
+
+    String summary = String("Reportes ") + (autoReadingsEnabled ? "activados" : "desactivados");
+    summary += " cada " + String(autoReadingsIntervalMs / 60000) + " min";
+    summary += " (" + String(reportFormat == REPORT_COMPACT ? "Compact" : "All") + ")";
+    return summary;
   }
 
   if (base == "/addid") {
@@ -1001,7 +1133,7 @@ void sendPeriodicStatusIfNeeded() {
     return;
   }
 
-  telegramBot->sendMessage(targetChat, formatStatus(), "");
+  telegramBot->sendMessage(targetChat, formatReportMessage(), "");
 }
 
 void loadStoredCredentials() {
