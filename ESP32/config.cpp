@@ -41,7 +41,7 @@ int clampAndStoreMlDefaults(const char *key, int defaultValue) {
 
 int clampAndStoreLightHours(const char *key, int defaultValue) {
   const int stored = irrigationPrefs.isKey(key) ? irrigationPrefs.getInt(key, defaultValue) : defaultValue;
-  const int clamped = constrain(stored, 1, 24);
+  const int clamped = constrain(stored, 12, 20);
   irrigationPrefs.putInt(key, clamped);
   return clamped;
 }
@@ -329,7 +329,7 @@ void setLastIrrigationEpoch(unsigned long epochSeconds) {
 }
 
 bool setLightHoursForStage(plantStage stage, int hours) {
-  if (hours < 1 || hours > 24) {
+  if (hours < 12 || hours > 20) {
     return false;
   }
 

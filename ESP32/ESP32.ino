@@ -406,12 +406,16 @@ String formatIrrigationConfig() {
     nowStr = formatDateTime(timeinfo);
   }
 
+  const float potVolumeL = getPotVolumeL();
+  const float stageMl = getMlPerLiterForStage(getCurrentStage()) * potVolumeL;
+
   String msg;
   msg += "====Configuración del invernadero====\n";
   msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
-  msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + "\n";
+  msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + " mL\n";
+  msg += "mL para la maceta: " + String(stageMl, 0) + " mL\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
-  msg += "Maceta: " + String(getPotVolumeL(), 1) + " L\n";
+  msg += "Maceta: " + String(potVolumeL, 1) + " L\n";
   if (isPumpCalibrated()) {
     msg += "Bomba: " + String(getPumpFlow(), 1) + " mL/s\n";
   } else {
@@ -450,6 +454,7 @@ String formatStatus() {
   stageStr.toUpperCase();
 
   String msg;
+  msg += "=======ESTADO DEL INVERNADERO======\n";
   msg += "Temperatura: ";
   msg += ambientOk ? String(ambientTemp, 1) + "°C" : "N/D";
   msg += " | Humedad Relativa: ";
@@ -699,7 +704,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
         return "Pre-floración, floración y final están fijas en 12 h y no se pueden editar.";
       }
       if (!setLightHoursForStage(stage, hours)) {
-        return "Horas de luz fuera de rango (1-24 h) para plántula/vegetativo.";
+        return "Horas de luz fuera de rango (12-20 h) para plántula/vegetativo.";
       }
       updated = true;
       return "Horas de luz actualizadas para etapa " + stageToken + ": " + String(hours) + " h";
@@ -844,7 +849,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     if (stage == PRE_FLORACION || stage == FLORACION || stage == FINAL) {
       return "Pre-floración, floración y final están fijas en 12 h y no se pueden editar.";
     }
-    if (!setLightHoursForStage(stage, hours)) return "Horas de luz inválidas (1-24 h) para plántula/vegetativo.";
+    if (!setLightHoursForStage(stage, hours)) return "Horas de luz inválidas (12-20 h) para plántula/vegetativo.";
     updatedConfig = true;
     return "Horas de luz para " + stageToken + ": " + String(hours) + " h";
   }
