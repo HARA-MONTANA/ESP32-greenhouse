@@ -469,7 +469,7 @@ String formatStatus() {
 
   msg += "Ultimo riego: " + formatLastIrrigation() + "  | mL: [" + String(stageMl, 0) + "] mL\n";
 
-  msg += "Riego: [" + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") + "] | Autolecturas: [" +
+  msg += "Riego: [" + String(isAutoIrrigationEnabled() ? "AUTO" : "MANUAL") + "] | Reportes: [" +
          String(autoReadingsEnabled ? "ON" : "OFF") + "]";
   return msg;
 }
