@@ -2,7 +2,7 @@
 // DHT22 (ambient temperature / humidity)
 #define PIN_DHT       4
 // OneWire bus for two DS18B20 sensors
-#define PIN_ONEWIRE   17
+// #define PIN_ONEWIRE   17
 
 // Relays
 #define PIN_RELE1     26  // Relay 1 (pump)
