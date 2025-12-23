@@ -5,7 +5,7 @@
 
 // --- Sensores lejos de la planta (fila superior) ---
 #define PIN_DHT       25
-#define PIN_LED_MOSFET 26   // MOSFET lógico para LEDs (ON/OFF o PWM)
+#define PIN_LED_MOSFET 26   // MOSFET LEDs
 
 // ADC1 (seguros con WiFi)
 #define PIN_MQ135     34   // input-only
