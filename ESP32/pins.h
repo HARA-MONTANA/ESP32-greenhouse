@@ -4,7 +4,7 @@
 // #define PIN_ONEWIRE   18   // 2x DS18B20 en el mismo bus
 
 // --- Sensores lejos de la planta (fila superior) ---
-#define PIN_DHT       25]
+#define PIN_DHT       25
 #define PIN_LED_MOSFET 26   // MOSFET lógico para LEDs (ON/OFF o PWM)
 
 // ADC1 (seguros con WiFi)
