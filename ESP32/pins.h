@@ -22,7 +22,7 @@
 // #define PIN_SD_MOSI   23
 
 // --- Cerca de la planta (fila inferior) ---
-#define PIN_FAN_PWM   16   // PWM MOSFET (fans)
+#define PIN_FAN_PWM   16   // MOSFET (fans)
 #define PIN_RELE1     17   // MOSFET bomba DC
 #define PIN_RELE2     13   // luz AC (relé)
 #define PIN_FLOAT     4   // Float switch
