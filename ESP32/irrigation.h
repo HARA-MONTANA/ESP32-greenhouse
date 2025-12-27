@@ -5,6 +5,8 @@
 void initIrrigationHardware();
 int readSoilMoisture();
 bool isTankWaterAvailable();
+void pumpOn();
+void pumpOff();
 int soilPercentFromAdc(int reading);
 bool checkSoilAndIrrigate();
 void irrigate(int initialSoilReading);
