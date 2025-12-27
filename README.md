@@ -1,18 +1,18 @@
 # ESP32-greenhousev2
 
-Mapeo de pines propuesto para el proyecto:
+Mapeo de pines utilizado actualmente (ver `ESP32/pins.h`):
 
-- **PIN_DHT (4):** DHT22 para temperatura y humedad ambiente.
-- **PIN_ONEWIRE (17):** Bus OneWire para 2 × DS18B20.
-- **PIN_RELE1 (26):** Relé 1 (bomba).
-- **PIN_RELE2 (27):** Relé 2 (luz).
+- **PIN_DHT (25):** DHT22 para temperatura y humedad ambiente.
+- **PIN_LED_MOSFET (26):** MOSFET para tiras LED auxiliares.
 - **PIN_MQ135 (34):** Sensor MQ-135 (entrada analógica).
-- **PIN_SUELO (35):** Sensor de humedad de suelo (entrada analógica).
-- **PIN_FLOAT (33):** Interruptor de flotador para nivel de agua (entrada digital).
-- **PIN_FAN_PWM (25):** PWM hacia MOSFET de ventiladores.
-- **PIN_SD_CS (5):** Chip Select de la tarjeta SD (SPI).
+- **PIN_SUELO (32):** Sensor de humedad de suelo (entrada analógica, ADC1).
 - **PIN_I2C_SDA (21):** Línea SDA para RTC (I2C).
 - **PIN_I2C_SCL (22):** Línea SCL para RTC (I2C).
+- **PIN_SD_CS (5):** Chip Select de la tarjeta SD (SPI remapeado).
+- **PIN_FAN_PWM (16):** PWM hacia MOSFET de ventiladores.
+- **PIN_RELE1 (17):** MOSFET para bomba de agua DC.
+- **PIN_RELE2 (13):** Relé para luz de corriente alterna.
+- **PIN_FLOAT (4):** Interruptor de flotador para nivel de agua (entrada digital).
 
 El firmware está ubicado en la carpeta `ESP32/` con el sketch principal `ESP32.ino` listo para abrirse en el Arduino IDE. Consulta `ESP32/pins.h` para las definiciones que se usan en el código.
 

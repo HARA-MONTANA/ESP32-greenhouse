@@ -513,6 +513,10 @@ bool stageSupportsHighRhAlerts(plantStage stage) {
   return stage == PRE_FLORACION || stage == FLORACION || stage == FINAL;
 }
 
+bool stageUsesLeds(plantStage stage) {
+  return stage == PRE_FLORACION || stage == FLORACION || stage == FINAL;
+}
+
 void evaluateAlerts() {
   const bool waterAvailable = isTankWaterAvailable();
   if (!waterAvailable && !alertWaterSent) {
@@ -928,9 +932,9 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
 
   if (base == "/calibrar") {
     awaitingCalibrationVolume = true;
-    digitalWrite(PIN_RELE1, LOW);
+    pumpOn();
     delay(5000);
-    digitalWrite(PIN_RELE1, HIGH);
+    pumpOff();
     return "Bomba activada 5s. Envía /caudal [mL] con el volumen medido.";
   }
 
@@ -1078,13 +1082,21 @@ void applyLightSchedule() {
 
   const time_t nowTs = mktime(&nowInfo);
   const time_t startTs = mktime(&startInfo);
-  const time_t offTs = startTs + getLightHoursForStage(getCurrentStage()) * 3600L;
+  const plantStage currentStage = getCurrentStage();
+  const time_t offTs = startTs + getLightHoursForStage(currentStage) * 3600L;
 
   const bool shouldBeOn = nowTs >= startTs && nowTs < offTs;
   const int desiredLevel = shouldBeOn ? LOW : HIGH;
 
   if (digitalRead(PIN_RELE2) != desiredLevel) {
     digitalWrite(PIN_RELE2, desiredLevel);
+  }
+
+  const bool ledsShouldBeOn = shouldBeOn && stageUsesLeds(currentStage);
+  const int desiredLedLevel = ledsShouldBeOn ? HIGH : LOW;
+
+  if (digitalRead(PIN_LED_MOSFET) != desiredLedLevel) {
+    digitalWrite(PIN_LED_MOSFET, desiredLedLevel);
   }
 }
 
@@ -1484,6 +1496,8 @@ void setup() {
   initFanPwm();
   pinMode(PIN_RELE2, OUTPUT);
   digitalWrite(PIN_RELE2, HIGH);
+  pinMode(PIN_LED_MOSFET, OUTPUT);
+  digitalWrite(PIN_LED_MOSFET, LOW);
 
   loadStoredCredentials();
   requestCredentials();

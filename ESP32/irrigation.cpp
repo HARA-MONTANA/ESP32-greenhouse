@@ -11,6 +11,8 @@ String stageToString(plantStage stage);
 
 namespace {
 const int R_Agua = PIN_RELE1;
+const int PUMP_ON_LEVEL = HIGH;
+const int PUMP_OFF_LEVEL = LOW;
 bool autoIrrigationEnabled = false;
 
 struct PulseSummary {
@@ -41,9 +43,9 @@ PulseSummary runPulsedIrrigation(float totalMl, float pumpFlow, int targetPercen
     unsigned long pulseOnMs = min(basePulseOnMs, remainingOnMs);
     pulseOnMs = max(pulseOnMs, 300UL);
 
-    digitalWrite(R_Agua, LOW);
+    digitalWrite(R_Agua, PUMP_ON_LEVEL);
     delay(pulseOnMs);
-    digitalWrite(R_Agua, HIGH);
+    digitalWrite(R_Agua, PUMP_OFF_LEVEL);
 
     summary.pulseCount++;
     summary.totalOnTimeMs += pulseOnMs;
@@ -62,9 +64,13 @@ PulseSummary runPulsedIrrigation(float totalMl, float pumpFlow, int targetPercen
 
 void initIrrigationHardware() {
   pinMode(R_Agua, OUTPUT);
-  digitalWrite(R_Agua, HIGH);  // Relé inactivo en HIGH
+  digitalWrite(R_Agua, PUMP_OFF_LEVEL);
   pinMode(PIN_FLOAT, INPUT_PULLUP);
 }
+
+void pumpOn() { digitalWrite(R_Agua, PUMP_ON_LEVEL); }
+
+void pumpOff() { digitalWrite(R_Agua, PUMP_OFF_LEVEL); }
 
 int readSoilMoisture() { return analogRead(PIN_SUELO); }
 
