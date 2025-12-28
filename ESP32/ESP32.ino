@@ -1504,8 +1504,11 @@ void setup() {
   digitalWrite(PIN_RELE2, HIGH);
   pinMode(PIN_LED_MOSFET, OUTPUT);
   digitalWrite(PIN_LED_MOSFET, LOW);
-  // Botón con pull-up interno: se considera presionado cuando lee LOW.
+  // Botón activo en LOW con pull-up interno. Se mantiene siempre como entrada
+  // (INPUT_PULLUP) y únicamente se lee su estado en LOW para saltar las
+  // credenciales; no se cambia a salida ni se escribe al pin.
   pinMode(PIN_CRED_SKIP, INPUT_PULLUP);
+  delay(10);
 
   loadStoredCredentials();
 
