@@ -1504,11 +1504,13 @@ void setup() {
   digitalWrite(PIN_RELE2, HIGH);
   pinMode(PIN_LED_MOSFET, OUTPUT);
   digitalWrite(PIN_LED_MOSFET, LOW);
+  // Botón con pull-up interno: se considera presionado cuando lee LOW.
   pinMode(PIN_CRED_SKIP, INPUT_PULLUP);
 
   loadStoredCredentials();
 
-  skipCredentialPrompt = digitalRead(PIN_CRED_SKIP) == LOW;
+  const bool credSkipPressed = digitalRead(PIN_CRED_SKIP) == LOW;
+  skipCredentialPrompt = credSkipPressed;
 
   if (skipCredentialPrompt && hasStoredCredentials()) {
     Serial.println();
