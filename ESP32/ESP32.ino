@@ -22,6 +22,7 @@ String telegramToken;
 String storedWifiSsid;
 String storedWifiPassword;
 String storedTelegramToken;
+bool skipCredentialPrompt = false;
 
 Preferences credentialsStore;
 Preferences settingsStore;
@@ -1161,6 +1162,11 @@ void loadStoredCredentials() {
   loadAuthorizedChatIds();
 }
 
+bool hasStoredCredentials() {
+  return !storedWifiSsid.isEmpty() && !storedWifiPassword.isEmpty() &&
+         !storedTelegramToken.isEmpty();
+}
+
 void saveWifiCredentials(const String &ssid, const String &password) {
   credentialsStore.putString("ssid", ssid);
   credentialsStore.putString("pass", password);
@@ -1498,9 +1504,29 @@ void setup() {
   digitalWrite(PIN_RELE2, HIGH);
   pinMode(PIN_LED_MOSFET, OUTPUT);
   digitalWrite(PIN_LED_MOSFET, LOW);
+  pinMode(PIN_CRED_SKIP, INPUT_PULLUP);
 
   loadStoredCredentials();
-  requestCredentials();
+
+  skipCredentialPrompt = digitalRead(PIN_CRED_SKIP) == LOW;
+
+  if (skipCredentialPrompt && hasStoredCredentials()) {
+    Serial.println();
+    Serial.println(
+        "Botón de salto presionado: usando credenciales guardadas en NVS.");
+    wifiSsid = storedWifiSsid;
+    wifiPassword = storedWifiPassword;
+    telegramToken = storedTelegramToken;
+  } else {
+    if (skipCredentialPrompt && !hasStoredCredentials()) {
+      Serial.println();
+      Serial.println(
+          "Botón de salto presionado pero faltan credenciales guardadas. "
+          "Solicitando datos por Serial.");
+    }
+
+    requestCredentials();
+  }
 
   timezoneOffsetHours = promptTimezoneOffset(timezoneOffsetHours);
   timezoneInfo = tzFromOffset(timezoneOffsetHours);
