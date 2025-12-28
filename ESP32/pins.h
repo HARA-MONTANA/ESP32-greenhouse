@@ -6,6 +6,7 @@
 // --- Sensores lejos de la planta (fila superior) ---
 #define PIN_DHT       25
 #define PIN_LED_MOSFET 26   // MOSFET LEDs
+#define PIN_CRED_SKIP 27    // Botón para usar credenciales almacenadas (activo en LOW)
 
 // ADC1 (seguros con WiFi)
 #define PIN_MQ135     34   // input-only
