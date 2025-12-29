@@ -476,20 +476,16 @@ String formatIrrigationConfig() {
 
   String msg;
   msg += "====Configuración del invernadero====\n";
-  msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
+  msg += "Etapa actual: " + stageToString(getCurrentStage()) + "\n";
   msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + " mL\n";
   msg += "mL para la maceta: " + String(stageMl, 0) + " mL\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
+  msg += "Riego automático: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF") + "\n";
   msg += "Maceta: " + String(potVolumeL, 1) + " L\n";
-  if (isPumpCalibrated()) {
-    msg += "Bomba: " + String(getPumpFlow(), 1) + " mL/s\n";
-  } else {
-    msg += "Bomba: sin calibrar\n";
-  }
-  msg += "Umbral suelo: " + String(getSoilThreshold()) + "%\n";
-  msg += "Umbral humedad alta: " + String(getSoilHighThreshold()) + "%\n";
-  msg += "Dias entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
-  msg += "Luces se apagan a las: " + formatLightsOffTime() + "\n";
+  msg += "Intervalo mínimo entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
+  msg += "Suelo: mínimo " + String(getSoilThreshold()) + "%, máximo " + String(getSoilHighThreshold()) + "%\n";
+  msg += "Alertas: Temp máx=" + String(tempAlertThreshold) + "°C, HR min=" + String(rhLowAlertThreshold) +
+         "%, HR máx=" + String(rhHighAlertThreshold) + "%, MQ máx=" + String(mqAlertThreshold) + "\n";
   msg += "Hora local: " + nowStr;
   return msg;
 }
