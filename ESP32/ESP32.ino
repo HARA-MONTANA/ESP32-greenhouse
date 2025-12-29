@@ -22,6 +22,8 @@ String telegramToken;
 String storedWifiSsid;
 String storedWifiPassword;
 String storedTelegramToken;
+bool skipCredentialPrompt = false;
+bool credentialSkipNotified = false;
 
 Preferences credentialsStore;
 Preferences settingsStore;
@@ -105,7 +107,8 @@ void updateFanControl(bool forceApply = false);
 // =========================================================
 //  FUNCIONES DE UTILIDAD
 // =========================================================
-String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
+String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0,
+                          bool allowSkipButton = false) {
   Serial.print(prompt);
   Serial.flush();
 
@@ -125,6 +128,24 @@ String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
       }
 
       line += c;
+    }
+
+    if (allowSkipButton) {
+      if (skipCredentialPrompt && hasStoredCredentials()) {
+        return "";
+      }
+
+      if (!skipCredentialPrompt && isSkipButtonPressed()) {
+        if (hasStoredCredentials()) {
+          notifyCredentialSkipUse();
+          skipCredentialPrompt = true;
+          return "";
+        }
+
+        Serial.println();
+        Serial.println(
+            "Botón de salto presionado pero faltan credenciales guardadas. Ingresa un dato válido.");
+      }
     }
 
     if (!line.isEmpty() && millis() - lastDataTime > 150) {
@@ -237,8 +258,37 @@ void updateFanControl(bool forceApply) {
   }
 }
 
+bool isSkipButtonPressed() { return digitalRead(PIN_CRED_SKIP) == LOW; }
+
+void notifyCredentialSkipUse() {
+  if (credentialSkipNotified) {
+    return;
+  }
+
+  Serial.println();
+  Serial.println("Botón de salto presionado: usando credenciales guardadas en NVS.");
+  credentialSkipNotified = true;
+}
+
 String promptOrStoredValue(const char *label, const String &storedValue, uint32_t timeoutMs) {
+  if (skipCredentialPrompt && hasStoredCredentials()) {
+    notifyCredentialSkipUse();
+    return storedValue;
+  }
+
   while (true) {
+    if (!skipCredentialPrompt && isSkipButtonPressed()) {
+      if (hasStoredCredentials()) {
+        notifyCredentialSkipUse();
+        skipCredentialPrompt = true;
+        return storedValue;
+      }
+
+      Serial.println();
+      Serial.println(
+          "Botón de salto presionado pero no hay credenciales guardadas. Ingresa un dato válido.");
+    }
+
     Serial.println();
     Serial.print(label);
 
@@ -247,7 +297,7 @@ String promptOrStoredValue(const char *label, const String &storedValue, uint32_
     }
 
     Serial.println();
-    String value = readLineFromSerial("> ", timeoutMs);
+    String value = readLineFromSerial("> ", timeoutMs, true);
 
     if (value.isEmpty()) {
       if (!storedValue.isEmpty()) {
@@ -1161,6 +1211,11 @@ void loadStoredCredentials() {
   loadAuthorizedChatIds();
 }
 
+bool hasStoredCredentials() {
+  return !storedWifiSsid.isEmpty() && !storedWifiPassword.isEmpty() &&
+         !storedTelegramToken.isEmpty();
+}
+
 void saveWifiCredentials(const String &ssid, const String &password) {
   credentialsStore.putString("ssid", ssid);
   credentialsStore.putString("pass", password);
@@ -1498,9 +1553,32 @@ void setup() {
   digitalWrite(PIN_RELE2, HIGH);
   pinMode(PIN_LED_MOSFET, OUTPUT);
   digitalWrite(PIN_LED_MOSFET, LOW);
+  // Botón activo en LOW con pull-up interno. Se mantiene siempre como entrada
+  // (INPUT_PULLUP) y únicamente se lee su estado en LOW para saltar las
+  // credenciales; no se cambia a salida ni se escribe al pin.
+  pinMode(PIN_CRED_SKIP, INPUT_PULLUP);
+  delay(10);
 
   loadStoredCredentials();
-  requestCredentials();
+
+  const bool credSkipPressed = isSkipButtonPressed();
+  skipCredentialPrompt = credSkipPressed;
+
+  if (skipCredentialPrompt && hasStoredCredentials()) {
+    notifyCredentialSkipUse();
+    wifiSsid = storedWifiSsid;
+    wifiPassword = storedWifiPassword;
+    telegramToken = storedTelegramToken;
+  } else {
+    if (skipCredentialPrompt && !hasStoredCredentials()) {
+      Serial.println();
+      Serial.println(
+          "Botón de salto presionado pero faltan credenciales guardadas. "
+          "Solicitando datos por Serial.");
+    }
+
+    requestCredentials();
+  }
 
   timezoneOffsetHours = promptTimezoneOffset(timezoneOffsetHours);
   timezoneInfo = tzFromOffset(timezoneOffsetHours);
