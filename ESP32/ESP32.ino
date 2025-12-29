@@ -478,7 +478,12 @@ String formatIrrigationConfig() {
   msg += "====Configuración del invernadero====\n";
   msg += "Etapa actual: " + stageToString(getCurrentStage()) + "\n";
   msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + " mL\n";
-  msg += "mL para la maceta: " + String(stageMl, 0) + " mL\n";
+  msg += "mL calculados para la maceta: " + String(stageMl, 0) + " mL\n";
+  msg += "mL/L por etapa: Plántula=" + String(getMlPerLiterForStage(PLANTULA)) +
+         ", Vegetativo=" + String(getMlPerLiterForStage(VEGETATIVO)) +
+         ", Pre-floración=" + String(getMlPerLiterForStage(PRE_FLORACION)) +
+         ", Floración=" + String(getMlPerLiterForStage(FLORACION)) +
+         ", Final=" + String(getMlPerLiterForStage(FINAL)) + "\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
   msg += "Riego automático: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF") + "\n";
   msg += "Maceta: " + String(potVolumeL, 1) + " L\n";
