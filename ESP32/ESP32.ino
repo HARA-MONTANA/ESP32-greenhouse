@@ -22,6 +22,10 @@ String telegramToken;
 String storedWifiSsid;
 String storedWifiPassword;
 String storedTelegramToken;
+bool skipCredentialPrompt = false;
+bool credentialSkipNotified = false;
+bool missingStoredCredsWarned = false;
+const char *kStoredTimezoneOffsetKey = "tzOff";
 
 Preferences credentialsStore;
 Preferences settingsStore;
@@ -105,7 +109,8 @@ void updateFanControl(bool forceApply = false);
 // =========================================================
 //  FUNCIONES DE UTILIDAD
 // =========================================================
-String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
+String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0,
+                          bool allowSkipButton = false) {
   Serial.print(prompt);
   Serial.flush();
 
@@ -125,6 +130,22 @@ String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0) {
       }
 
       line += c;
+    }
+
+    if (allowSkipButton) {
+      if (skipCredentialPrompt && hasStoredCredentials()) {
+        return "";
+      }
+
+      if (!skipCredentialPrompt && isSkipButtonPressed()) {
+        if (hasStoredCredentials()) {
+          notifyCredentialSkipUse();
+          skipCredentialPrompt = true;
+          return "";
+        }
+
+        warnMissingStoredCredentials();
+      }
     }
 
     if (!line.isEmpty() && millis() - lastDataTime > 150) {
@@ -237,8 +258,47 @@ void updateFanControl(bool forceApply) {
   }
 }
 
+bool isSkipButtonPressed() { return digitalRead(PIN_CRED_SKIP) == LOW; }
+
+void warnMissingStoredCredentials() {
+  if (missingStoredCredsWarned) {
+    return;
+  }
+
+  Serial.println();
+  Serial.println(
+      "Botón de salto presionado pero no hay credenciales guardadas. "
+      "Ingresa un dato válido.");
+  missingStoredCredsWarned = true;
+}
+
+void notifyCredentialSkipUse() {
+  if (credentialSkipNotified) {
+    return;
+  }
+
+  Serial.println();
+  Serial.println("Botón de salto presionado: usando credenciales guardadas en NVS.");
+  credentialSkipNotified = true;
+}
+
 String promptOrStoredValue(const char *label, const String &storedValue, uint32_t timeoutMs) {
+  if (skipCredentialPrompt && hasStoredCredentials()) {
+    notifyCredentialSkipUse();
+    return storedValue;
+  }
+
   while (true) {
+    if (!skipCredentialPrompt && isSkipButtonPressed()) {
+      if (hasStoredCredentials()) {
+        notifyCredentialSkipUse();
+        skipCredentialPrompt = true;
+        return storedValue;
+      }
+
+      warnMissingStoredCredentials();
+    }
+
     Serial.println();
     Serial.print(label);
 
@@ -247,7 +307,7 @@ String promptOrStoredValue(const char *label, const String &storedValue, uint32_
     }
 
     Serial.println();
-    String value = readLineFromSerial("> ", timeoutMs);
+    String value = readLineFromSerial("> ", timeoutMs, true);
 
     if (value.isEmpty()) {
       if (!storedValue.isEmpty()) {
@@ -292,6 +352,10 @@ void loadRuntimeSettings() {
 
   int storedFormat = settingsStore.getInt("repFmt", static_cast<int>(reportFormat));
   reportFormat = storedFormat == static_cast<int>(REPORT_FULL) ? REPORT_FULL : REPORT_COMPACT;
+
+  if (settingsStore.isKey(kStoredTimezoneOffsetKey)) {
+    timezoneOffsetHours = constrain(settingsStore.getInt(kStoredTimezoneOffsetKey, timezoneOffsetHours), -12, 14);
+  }
 }
 
 void saveRuntimeSettings() {
@@ -306,6 +370,7 @@ void saveRuntimeSettings() {
   settingsStore.putBool("autoRpt", autoReadingsEnabled);
   settingsStore.putUInt("autoInt", autoReadingsIntervalMs);
   settingsStore.putInt("repFmt", static_cast<int>(reportFormat));
+  settingsStore.putInt(kStoredTimezoneOffsetKey, timezoneOffsetHours);
 }
 
 plantStage stageFromString(const String &value) {
@@ -587,25 +652,59 @@ String tzFromOffset(int offsetHours) {
 }
 
 int promptTimezoneOffset(int defaultOffset) {
+  ensureSettingsStore();
+
+  const bool hasStoredOffset = settingsStore.isKey(kStoredTimezoneOffsetKey);
+  const int storedOffset = constrain(settingsStore.getInt(kStoredTimezoneOffsetKey, defaultOffset), -12, 14);
+
+  if (skipCredentialPrompt && hasStoredOffset) {
+    Serial.println();
+    Serial.println("Botón de salto: usando offset guardado en NVS.");
+    return storedOffset;
+  }
+
   Serial.println();
   Serial.println("Zona horaria: ingresa el offset UTC en horas (ej: -5, -7, +4).");
   Serial.print("Valor actual ");
   Serial.print(defaultOffset);
   Serial.println(". Presiona Enter para mantenerlo.");
 
-  String input = readLineFromSerial("> ", 20000);
-  input.trim();
+  while (true) {
+    if (!skipCredentialPrompt && isSkipButtonPressed()) {
+      if (hasStoredOffset) {
+        notifyCredentialSkipUse();
+        skipCredentialPrompt = true;
+        Serial.println();
+        Serial.println("Botón de salto: usando offset guardado en NVS.");
+        return storedOffset;
+      }
 
-  if (input.isEmpty()) {
-    Serial.println("Usando offset existente.");
-    return defaultOffset;
+      Serial.println();
+      Serial.println("Botón de salto presionado pero no hay offset guardado. Ingresa un valor válido.");
+    }
+
+    String input = readLineFromSerial("> ", 20000, true);
+    input.trim();
+
+    if (skipCredentialPrompt && hasStoredOffset && input.isEmpty()) {
+      Serial.println("Usando offset almacenado en NVS.");
+      return storedOffset;
+    }
+
+    if (input.isEmpty()) {
+      Serial.println("Usando offset existente.");
+      settingsStore.putInt(kStoredTimezoneOffsetKey, defaultOffset);
+      return defaultOffset;
+    }
+
+    int offset = input.toInt();
+    offset = constrain(offset, -12, 14);
+    Serial.print("Offset seleccionado: ");
+    Serial.println(offset);
+
+    settingsStore.putInt(kStoredTimezoneOffsetKey, offset);
+    return offset;
   }
-
-  int offset = input.toInt();
-  offset = constrain(offset, -12, 14);
-  Serial.print("Offset seleccionado: ");
-  Serial.println(offset);
-  return offset;
 }
 
 String handleIrrigationCommand(const String &rawLine, bool &updated) {
@@ -1161,6 +1260,11 @@ void loadStoredCredentials() {
   loadAuthorizedChatIds();
 }
 
+bool hasStoredCredentials() {
+  return !storedWifiSsid.isEmpty() && !storedWifiPassword.isEmpty() &&
+         !storedTelegramToken.isEmpty();
+}
+
 void saveWifiCredentials(const String &ssid, const String &password) {
   credentialsStore.putString("ssid", ssid);
   credentialsStore.putString("pass", password);
@@ -1498,11 +1602,45 @@ void setup() {
   digitalWrite(PIN_RELE2, HIGH);
   pinMode(PIN_LED_MOSFET, OUTPUT);
   digitalWrite(PIN_LED_MOSFET, LOW);
+  // Botón activo en LOW con pull-up interno. Se mantiene siempre como entrada
+  // (INPUT_PULLUP) y únicamente se lee su estado en LOW para saltar las
+  // credenciales; no se cambia a salida ni se escribe al pin.
+  pinMode(PIN_CRED_SKIP, INPUT_PULLUP);
+  delay(10);
 
   loadStoredCredentials();
-  requestCredentials();
 
-  timezoneOffsetHours = promptTimezoneOffset(timezoneOffsetHours);
+  const bool credSkipPressed = isSkipButtonPressed();
+  const bool hasStoredCreds = hasStoredCredentials();
+  skipCredentialPrompt = credSkipPressed && hasStoredCreds;
+
+  if (skipCredentialPrompt) {
+    notifyCredentialSkipUse();
+    wifiSsid = storedWifiSsid;
+    wifiPassword = storedWifiPassword;
+    telegramToken = storedTelegramToken;
+  } else {
+    if (credSkipPressed && !hasStoredCreds) {
+      warnMissingStoredCredentials();
+      Serial.println("Solicitando datos por Serial.");
+    }
+
+    requestCredentials();
+  }
+
+  ensureSettingsStore();
+  const bool hasStoredOffset = settingsStore.isKey(kStoredTimezoneOffsetKey);
+  const int storedOffset = constrain(
+      settingsStore.getInt(kStoredTimezoneOffsetKey, timezoneOffsetHours), -12,
+      14);
+
+  if (skipCredentialPrompt && hasStoredOffset) {
+    Serial.println();
+    Serial.println("Botón de salto: usando offset guardado en NVS.");
+    timezoneOffsetHours = storedOffset;
+  } else {
+    timezoneOffsetHours = promptTimezoneOffset(timezoneOffsetHours);
+  }
   timezoneInfo = tzFromOffset(timezoneOffsetHours);
   configureTimezone();
   rtcReady = initRtc();
