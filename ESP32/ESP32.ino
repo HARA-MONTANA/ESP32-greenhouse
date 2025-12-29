@@ -24,6 +24,8 @@ String storedWifiPassword;
 String storedTelegramToken;
 bool skipCredentialPrompt = false;
 bool credentialSkipNotified = false;
+bool missingStoredCredsWarned = false;
+const char *kStoredTimezoneOffsetKey = "tzOff";
 
 Preferences credentialsStore;
 Preferences settingsStore;
@@ -142,9 +144,7 @@ String readLineFromSerial(const char *prompt, uint32_t timeoutMs = 0,
           return "";
         }
 
-        Serial.println();
-        Serial.println(
-            "Botón de salto presionado pero faltan credenciales guardadas. Ingresa un dato válido.");
+        warnMissingStoredCredentials();
       }
     }
 
@@ -260,6 +260,18 @@ void updateFanControl(bool forceApply) {
 
 bool isSkipButtonPressed() { return digitalRead(PIN_CRED_SKIP) == LOW; }
 
+void warnMissingStoredCredentials() {
+  if (missingStoredCredsWarned) {
+    return;
+  }
+
+  Serial.println();
+  Serial.println(
+      "Botón de salto presionado pero no hay credenciales guardadas. "
+      "Ingresa un dato válido.");
+  missingStoredCredsWarned = true;
+}
+
 void notifyCredentialSkipUse() {
   if (credentialSkipNotified) {
     return;
@@ -284,9 +296,7 @@ String promptOrStoredValue(const char *label, const String &storedValue, uint32_
         return storedValue;
       }
 
-      Serial.println();
-      Serial.println(
-          "Botón de salto presionado pero no hay credenciales guardadas. Ingresa un dato válido.");
+      warnMissingStoredCredentials();
     }
 
     Serial.println();
@@ -342,6 +352,10 @@ void loadRuntimeSettings() {
 
   int storedFormat = settingsStore.getInt("repFmt", static_cast<int>(reportFormat));
   reportFormat = storedFormat == static_cast<int>(REPORT_FULL) ? REPORT_FULL : REPORT_COMPACT;
+
+  if (settingsStore.isKey(kStoredTimezoneOffsetKey)) {
+    timezoneOffsetHours = constrain(settingsStore.getInt(kStoredTimezoneOffsetKey, timezoneOffsetHours), -12, 14);
+  }
 }
 
 void saveRuntimeSettings() {
@@ -356,6 +370,7 @@ void saveRuntimeSettings() {
   settingsStore.putBool("autoRpt", autoReadingsEnabled);
   settingsStore.putUInt("autoInt", autoReadingsIntervalMs);
   settingsStore.putInt("repFmt", static_cast<int>(reportFormat));
+  settingsStore.putInt(kStoredTimezoneOffsetKey, timezoneOffsetHours);
 }
 
 plantStage stageFromString(const String &value) {
@@ -637,25 +652,59 @@ String tzFromOffset(int offsetHours) {
 }
 
 int promptTimezoneOffset(int defaultOffset) {
+  ensureSettingsStore();
+
+  const bool hasStoredOffset = settingsStore.isKey(kStoredTimezoneOffsetKey);
+  const int storedOffset = constrain(settingsStore.getInt(kStoredTimezoneOffsetKey, defaultOffset), -12, 14);
+
+  if (skipCredentialPrompt && hasStoredOffset) {
+    Serial.println();
+    Serial.println("Botón de salto: usando offset guardado en NVS.");
+    return storedOffset;
+  }
+
   Serial.println();
   Serial.println("Zona horaria: ingresa el offset UTC en horas (ej: -5, -7, +4).");
   Serial.print("Valor actual ");
   Serial.print(defaultOffset);
   Serial.println(". Presiona Enter para mantenerlo.");
 
-  String input = readLineFromSerial("> ", 20000);
-  input.trim();
+  while (true) {
+    if (!skipCredentialPrompt && isSkipButtonPressed()) {
+      if (hasStoredOffset) {
+        notifyCredentialSkipUse();
+        skipCredentialPrompt = true;
+        Serial.println();
+        Serial.println("Botón de salto: usando offset guardado en NVS.");
+        return storedOffset;
+      }
 
-  if (input.isEmpty()) {
-    Serial.println("Usando offset existente.");
-    return defaultOffset;
+      Serial.println();
+      Serial.println("Botón de salto presionado pero no hay offset guardado. Ingresa un valor válido.");
+    }
+
+    String input = readLineFromSerial("> ", 20000, true);
+    input.trim();
+
+    if (skipCredentialPrompt && hasStoredOffset && input.isEmpty()) {
+      Serial.println("Usando offset almacenado en NVS.");
+      return storedOffset;
+    }
+
+    if (input.isEmpty()) {
+      Serial.println("Usando offset existente.");
+      settingsStore.putInt(kStoredTimezoneOffsetKey, defaultOffset);
+      return defaultOffset;
+    }
+
+    int offset = input.toInt();
+    offset = constrain(offset, -12, 14);
+    Serial.print("Offset seleccionado: ");
+    Serial.println(offset);
+
+    settingsStore.putInt(kStoredTimezoneOffsetKey, offset);
+    return offset;
   }
-
-  int offset = input.toInt();
-  offset = constrain(offset, -12, 14);
-  Serial.print("Offset seleccionado: ");
-  Serial.println(offset);
-  return offset;
 }
 
 String handleIrrigationCommand(const String &rawLine, bool &updated) {
@@ -1562,25 +1611,36 @@ void setup() {
   loadStoredCredentials();
 
   const bool credSkipPressed = isSkipButtonPressed();
-  skipCredentialPrompt = credSkipPressed;
+  const bool hasStoredCreds = hasStoredCredentials();
+  skipCredentialPrompt = credSkipPressed && hasStoredCreds;
 
-  if (skipCredentialPrompt && hasStoredCredentials()) {
+  if (skipCredentialPrompt) {
     notifyCredentialSkipUse();
     wifiSsid = storedWifiSsid;
     wifiPassword = storedWifiPassword;
     telegramToken = storedTelegramToken;
   } else {
-    if (skipCredentialPrompt && !hasStoredCredentials()) {
-      Serial.println();
-      Serial.println(
-          "Botón de salto presionado pero faltan credenciales guardadas. "
-          "Solicitando datos por Serial.");
+    if (credSkipPressed && !hasStoredCreds) {
+      warnMissingStoredCredentials();
+      Serial.println("Solicitando datos por Serial.");
     }
 
     requestCredentials();
   }
 
-  timezoneOffsetHours = promptTimezoneOffset(timezoneOffsetHours);
+  ensureSettingsStore();
+  const bool hasStoredOffset = settingsStore.isKey(kStoredTimezoneOffsetKey);
+  const int storedOffset = constrain(
+      settingsStore.getInt(kStoredTimezoneOffsetKey, timezoneOffsetHours), -12,
+      14);
+
+  if (skipCredentialPrompt && hasStoredOffset) {
+    Serial.println();
+    Serial.println("Botón de salto: usando offset guardado en NVS.");
+    timezoneOffsetHours = storedOffset;
+  } else {
+    timezoneOffsetHours = promptTimezoneOffset(timezoneOffsetHours);
+  }
   timezoneInfo = tzFromOffset(timezoneOffsetHours);
   configureTimezone();
   rtcReady = initRtc();
