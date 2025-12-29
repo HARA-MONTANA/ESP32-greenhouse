@@ -476,20 +476,16 @@ String formatIrrigationConfig() {
 
   String msg;
   msg += "====Configuración del invernadero====\n";
-  msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
+  msg += "Etapa actual: " + stageToString(getCurrentStage()) + "\n";
   msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + " mL\n";
   msg += "mL para la maceta: " + String(stageMl, 0) + " mL\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
+  msg += "Riego automático: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF") + "\n";
   msg += "Maceta: " + String(potVolumeL, 1) + " L\n";
-  if (isPumpCalibrated()) {
-    msg += "Bomba: " + String(getPumpFlow(), 1) + " mL/s\n";
-  } else {
-    msg += "Bomba: sin calibrar\n";
-  }
-  msg += "Umbral suelo: " + String(getSoilThreshold()) + "%\n";
-  msg += "Umbral humedad alta: " + String(getSoilHighThreshold()) + "%\n";
-  msg += "Dias entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
-  msg += "Luces se apagan a las: " + formatLightsOffTime() + "\n";
+  msg += "Intervalo mínimo entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
+  msg += "Suelo: mínimo " + String(getSoilThreshold()) + "%, máximo " + String(getSoilHighThreshold()) + "%\n";
+  msg += "Alertas: Temp máx=" + String(tempAlertThreshold) + "°C, HR min=" + String(rhLowAlertThreshold) +
+         "%, HR máx=" + String(rhHighAlertThreshold) + "%, MQ máx=" + String(mqAlertThreshold) + "\n";
   msg += "Hora local: " + nowStr;
   return msg;
 }
@@ -707,7 +703,8 @@ int promptTimezoneOffset(int defaultOffset) {
   }
 }
 
-String handleIrrigationCommand(const String &rawLine, bool &updated) {
+String handleIrrigationCommand(const String &rawLine, bool &updatedConfig,
+                               bool &updatedRuntime) {
   String line = rawLine;
   line.trim();
   if (line.isEmpty()) {
@@ -716,7 +713,8 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
 
   String lower = line;
   lower.toLowerCase();
-  updated = false;
+  updatedConfig = false;
+  updatedRuntime = false;
 
   if (lower.startsWith("stage")) {
     int spaceIndex = lower.indexOf(' ');
@@ -725,7 +723,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       stageToken.trim();
       plantStage newStage = stageFromString(stageToken);
       updateStage(newStage);
-      updated = true;
+      updatedConfig = true;
       return "Etapa actualizada a " + stageToken;
     }
     return "Etapas disponibles: plantula (pl), vegetativo (veg), pre-floracion (pre), floracion (flo), final (fin). Usa: stage <etapa>";
@@ -742,7 +740,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       if (!setMlPerLiterForStage(stage, value)) {
         return "Valor mL/L fuera de rango (5-200).";
       }
-      updated = true;
+      updatedConfig = true;
       return "mL/L actualizado para etapa " + stageToken + ": " + String(value);
     }
   } else if (lower.startsWith("pot")) {
@@ -752,7 +750,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       if (!setPotVolumeL(liters)) {
         return "Capacidad de maceta fuera de rango (1-50 L).";
       }
-      updated = true;
+      updatedConfig = true;
       return "Volumen de maceta actualizado: " + String(liters);
     }
   } else if (lower.startsWith("flow")) {
@@ -762,7 +760,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       if (!setPumpFlow(flow)) {
         return "Caudal inválido (1-50 mL/s).";
       }
-      updated = true;
+      updatedConfig = true;
       return "Caudal de bomba actualizado: " + String(flow);
     }
   } else if (lower.startsWith("soilmax")) {
@@ -772,7 +770,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       if (!setSoilHighThreshold(threshold)) {
         return "Umbral de humedad alta fuera de rango (50-100%).";
       }
-      updated = true;
+      updatedConfig = true;
       return "Umbral de humedad alta actualizado: " + String(threshold) + "%";
     }
   } else if (lower.startsWith("soil")) {
@@ -782,7 +780,7 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       if (!setSoilThreshold(threshold)) {
         return "Umbral de suelo fuera de rango (0-50%).";
       }
-      updated = true;
+      updatedConfig = true;
       return "Umbral de suelo actualizado: " + String(threshold) + "%";
     }
   } else if (lower.startsWith("interval")) {
@@ -792,8 +790,52 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       if (!setIrrigationIntervalDays(days)) {
         return "Intervalo de riego fuera de rango (1-5 días).";
       }
-      updated = true;
+      updatedConfig = true;
       return "Intervalo mínimo entre riegos actualizado a " + String(days) + " días";
+    }
+  } else if (lower.startsWith("temp_max")) {
+    int spaceIndex = lower.indexOf(' ');
+    if (spaceIndex > 0) {
+      int val = lower.substring(spaceIndex + 1).toInt();
+      if (val <= 0) {
+        return "Umbral temp alta inválido (usa C enteros).";
+      }
+      tempAlertThreshold = constrain(val, 1, 100);
+      updatedRuntime = true;
+      return "Umbral temp alta: " + String(tempAlertThreshold) + "°C";
+    }
+  } else if (lower.startsWith("hum_min")) {
+    int spaceIndex = lower.indexOf(' ');
+    if (spaceIndex > 0) {
+      int val = lower.substring(spaceIndex + 1).toInt();
+      if (val <= 0) {
+        return "Umbral humedad baja inválido (1-100%).";
+      }
+      rhLowAlertThreshold = constrain(val, 1, 100);
+      updatedRuntime = true;
+      return "Umbral humedad ambiente baja: " + String(rhLowAlertThreshold) + "%";
+    }
+  } else if (lower.startsWith("hum_max")) {
+    int spaceIndex = lower.indexOf(' ');
+    if (spaceIndex > 0) {
+      int val = lower.substring(spaceIndex + 1).toInt();
+      if (val <= 0) {
+        return "Umbral humedad alta inválido (1-100%).";
+      }
+      rhHighAlertThreshold = constrain(val, 1, 100);
+      updatedRuntime = true;
+      return "Umbral humedad ambiente alta: " + String(rhHighAlertThreshold) + "%";
+    }
+  } else if (lower.startsWith("aire_max")) {
+    int spaceIndex = lower.indexOf(' ');
+    if (spaceIndex > 0) {
+      int val = lower.substring(spaceIndex + 1).toInt();
+      if (val <= 0) {
+        return "Umbral MQ inválido (usa enteros positivos).";
+      }
+      mqAlertThreshold = max(val, 1);
+      updatedRuntime = true;
+      return "Umbral MQ: " + String(mqAlertThreshold);
     }
   } else if (lower.startsWith("luz")) {
     int firstSpace = lower.indexOf(' ');
@@ -809,18 +851,18 @@ String handleIrrigationCommand(const String &rawLine, bool &updated) {
       if (!setLightHoursForStage(stage, hours)) {
         return "Horas de luz fuera de rango (12-20 h) para plántula/vegetativo.";
       }
-      updated = true;
+      updatedConfig = true;
       return "Horas de luz actualizadas para etapa " + stageToken + ": " + String(hours) + " h";
     }
   } else if (lower == "reset") {
     configReset();
-    updated = true;
+    updatedConfig = true;
     return "Configuración de riego restablecida a valores por defecto.";
     } else if (lower == "conf") {
       return formatIrrigationConfig();
     }
 
-    return "Comandos: stage <plantula|vegetativo|pre-floracion|floracion|final>, ml <etapa> <valor>, luz <plantula|vegetativo> <horas>, pot <L>, flow <mL/s>, soil <pct>, soilmax <pct>, interval <dias>, status, reset, conf";
+    return "Comandos: stage <plantula|vegetativo|pre-floracion|floracion|final>, ml <etapa> <valor>, luz <plantula|vegetativo> <horas>, pot <L>, flow <mL/s>, soil <pct>, soilmax <pct>, interval <dias>, temp_max <C>, hum_min <pct>, hum_max <pct>, aire_max <N>, status, reset, conf";
   }
 
 void handleSerialCommands() {
@@ -829,15 +871,22 @@ void handleSerialCommands() {
   }
 
   String line = Serial.readStringUntil('\n');
-  bool updated = false;
-  String response = handleIrrigationCommand(line, updated);
+  bool updatedConfig = false;
+  bool updatedRuntime = false;
+  String response = handleIrrigationCommand(line, updatedConfig, updatedRuntime);
 
   if (!response.isEmpty()) {
     Serial.println(response);
   }
 
-  if (updated) {
+  if (updatedConfig) {
     configSave();
+  }
+  if (updatedRuntime) {
+    saveRuntimeSettings();
+  }
+
+  if (updatedConfig || updatedRuntime) {
     printIrrigationConfig();
   }
 }
