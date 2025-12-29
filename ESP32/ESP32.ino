@@ -476,20 +476,34 @@ String formatIrrigationConfig() {
 
   String msg;
   msg += "====Configuración del invernadero====\n";
-  msg += "Etapa: " + stageToString(getCurrentStage()) + "\n";
+  msg += "Etapa actual: " + stageToString(getCurrentStage()) + "\n";
   msg += "mL/L etapa actual: " + String(getMlPerLiterForStage(getCurrentStage())) + " mL\n";
-  msg += "mL para la maceta: " + String(stageMl, 0) + " mL\n";
+  msg += "mL calculados para la maceta: " + String(stageMl, 0) + " mL\n";
+  msg += "mL/L por etapa: Plántula=" + String(getMlPerLiterForStage(PLANTULA)) +
+         ", Vegetativo=" + String(getMlPerLiterForStage(VEGETATIVO)) +
+         ", Pre-floración=" + String(getMlPerLiterForStage(PRE_FLORACION)) +
+         ", Floración=" + String(getMlPerLiterForStage(FLORACION)) +
+         ", Final=" + String(getMlPerLiterForStage(FINAL)) + "\n";
   msg += "Último riego: " + formatLastIrrigation() + "\n";
+  msg += "Riego automático: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF") + "\n";
   msg += "Maceta: " + String(potVolumeL, 1) + " L\n";
+  msg += "Intervalo mínimo entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
   if (isPumpCalibrated()) {
-    msg += "Bomba: " + String(getPumpFlow(), 1) + " mL/s\n";
+    msg += "Bomba: " + String(getPumpFlow(), 1) + " mL/s (calibrada)\n";
   } else {
     msg += "Bomba: sin calibrar\n";
   }
-  msg += "Umbral suelo: " + String(getSoilThreshold()) + "%\n";
-  msg += "Umbral humedad alta: " + String(getSoilHighThreshold()) + "%\n";
-  msg += "Dias entre riegos: " + String(getIrrigationIntervalDays()) + " días\n";
-  msg += "Luces se apagan a las: " + formatLightsOffTime() + "\n";
+  msg += "Suelo: mínimo " + String(getSoilThreshold()) + "%, máximo " + String(getSoilHighThreshold()) +
+         "% | Calibración ADC seco=" + String(soilDryAdc) + " húmedo=" + String(soilWetAdc) + "\n";
+  msg += "Luces: plántula=" + String(getLightHoursForStage(PLANTULA)) + " h, vegetativo=" +
+         String(getLightHoursForStage(VEGETATIVO)) + " h, pre-floración/floración/final=12 h (fijo) | OFF a " +
+         formatLightsOffTime() + "\n";
+  msg += "Alertas: Temp máx=" + String(tempAlertThreshold) + "°C, HR min=" + String(rhLowAlertThreshold) +
+         "%, HR máx=" + String(rhHighAlertThreshold) + "%, MQ máx=" + String(mqAlertThreshold) + "\n";
+  msg += "Reportes: " + String(autoReadingsEnabled ? "ON" : "OFF") + " cada " +
+         String(autoReadingsIntervalMs / 60000) + " min en formato " +
+         String(reportFormat == REPORT_COMPACT ? "Compact" : "All") + "\n";
+  msg += "Ventilador: modo " + String(fanAuto ? "AUTO" : "MANUAL") + " al " + String(fanPercent) + "%\n";
   msg += "Hora local: " + nowStr;
   return msg;
 }
