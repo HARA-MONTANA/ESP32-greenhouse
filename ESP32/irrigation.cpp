@@ -74,7 +74,7 @@ void pumpOff() { digitalWrite(R_Agua, PUMP_OFF_LEVEL); }
 
 int readSoilMoisture() { return analogRead(PIN_SUELO); }
 
-bool isTankWaterAvailable() { return digitalRead(PIN_FLOAT) == HIGH; }
+bool isTankWaterAvailable() { return digitalRead(PIN_FLOAT) == LOW; }
 
 bool checkSoilAndIrrigate() {
   const int soilReading = readSoilMoisture();
