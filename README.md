@@ -1,4 +1,4 @@
-# ESP32-greenhousev2
+# ESP32-greenhouse
 
 Mapeo de pines utilizado actualmente (ver `ESP32/pins.h`):
 
