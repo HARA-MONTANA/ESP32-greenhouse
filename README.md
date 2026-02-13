@@ -51,9 +51,9 @@ Envía `/start` al bot para ver la ayuda. Todos los valores se guardan en NVS y 
 | `/start` | Muestra la ayuda |
 | `/estado` | Estado actual del invernadero |
 | `/regar [mL]` | Riego manual (máx 1500 mL) |
-| `/auto [on\|off]` | Activar/desactivar riego automático |
-| `/fan [0-100]` | Ventilador en modo manual al % indicado |
-| `/fanauto [on\|off]` | Ventilador en modo automático |
+| `/autoriego [on\|off]` | Activar/desactivar riego automático |
+| `/vent [0-100]` | Ventilador en modo manual al % indicado |
+| `/ventauto [on\|off]` | Ventilador en modo automático |
 | `/reportes [on\|off] [min] [compact\|all]` | Reportes periódicos por Telegram |
 
 ### Configuración de la planta
@@ -64,7 +64,7 @@ Envía `/start` al bot para ver la ayuda. Todos los valores se guardan en NVS y 
 | `/etapa [pl\|veg\|pre\|flo\|fin]` | Cambiar etapa de crecimiento |
 | `/maceta [litros]` | Volumen de la maceta (1-50 L) |
 | `/luz [etapa] [horas]` | Horas de luz para plántula o vegetativo (12-20 h) |
-| `/pausa [dias]` | Días mínimos entre riegos automáticos (1-5) |
+| `/pausariego [dias]` | Días mínimos entre riegos automáticos (1-5) |
 
 ### Sensor de suelo
 
@@ -72,7 +72,7 @@ Envía `/start` al bot para ver la ayuda. Todos los valores se guardan en NVS y 
 |---------|-------------|
 | `/suelomin [%]` | Umbral mínimo de humedad para regar (0-50%) |
 | `/suelomax [%]` | Umbral máximo de humedad del suelo (50-100%) |
-| `/suelocal [SECO] [HUMEDO]` | Calibrar sensor con valores ADC seco y húmedo |
+| `/calsuelo [SECO] [HUMEDO]` | Calibrar sensor con valores ADC seco y húmedo |
 
 ### Alertas
 

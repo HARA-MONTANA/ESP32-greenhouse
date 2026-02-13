@@ -945,19 +945,19 @@ String commandHelp() {
   help += "== Uso diario ==\n";
   help += "/estado - Ver estado del invernadero\n";
   help += "/regar [mL] - Riego manual\n";
-  help += "/auto [on|off] - Riego automático\n";
-  help += "/fan [0-100] - Ventilador manual\n";
-  help += "/fanauto [on|off] - Ventilador automático\n";
+  help += "/autoriego [on|off] - Riego automático\n";
+  help += "/vent [0-100] - Ventilador manual\n";
+  help += "/ventauto [on|off] - Ventilador automático\n";
   help += "/reportes [on|off] [min] [compact|all]\n";
   help += "\n== Configuración ==\n";
   help += "/config - Ver configuración\n";
   help += "/etapa [pl|veg|pre|flo|fin]\n";
   help += "/maceta [litros]\n";
   help += "/luz [etapa] [horas]\n";
-  help += "/pausa [dias] - Intervalo entre riegos\n";
+  help += "/pausariego [dias] - Intervalo entre riegos\n";
   help += "/suelomin [%] - Umbral mínimo suelo\n";
   help += "/suelomax [%] - Umbral máximo suelo\n";
-  help += "/suelocal [SECO] [HUMEDO] - Calibrar sensor\n";
+  help += "/calsuelo [SECO] [HUMEDO] - Calibrar sensor\n";
   help += "\n== Alertas ==\n";
   help += "/tempmax [C] /hummin [%] /hummax [%] /airemax [N]\n";
   help += "\n== Bomba ==\n";
@@ -1021,9 +1021,9 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     return "Horas de luz para " + stageToken + ": " + String(hours) + " h";
   }
 
-  if (base == "/suelocal") {
+  if (base == "/calsuelo") {
     int space2 = args.indexOf(' ');
-    if (space2 == -1) return "Uso: /suelocal [SECO] [HUMEDO]";
+    if (space2 == -1) return "Uso: /calsuelo [SECO] [HUMEDO]";
     soilDryAdc = constrain(args.substring(0, space2).toInt(), 0, 4095);
     soilWetAdc = constrain(args.substring(space2 + 1).toInt(), 0, 4095);
     if (soilDryAdc <= soilWetAdc) {
@@ -1049,9 +1049,9 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     return "Umbral mínimo de humedad fijado en " + String(pct) + "%";
   }
 
-  if (base == "/pausa") {
+  if (base == "/pausariego") {
     int days = args.toInt();
-    if (days <= 0) return "Uso: /pausa [dias]";
+    if (days <= 0) return "Uso: /pausariego [dias]";
     if (!setIrrigationIntervalDays(days)) return "Intervalo entre riegos inválido (1-5 días).";
     updatedConfig = true;
     return "Intervalo entre riegos fijado en " + String(days) + " días";
@@ -1110,23 +1110,23 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     awaitingCalibrationVolume = false;
     setAutoIrrigationEnabled(false);
     return "Caudal calculado: " + String(newFlow) +
-           " mL/s. Envía /auto on para activar el riego automático.";
+           " mL/s. Envía /autoriego on para activar el riego automático.";
   }
 
-  if (base == "/auto") {
+  if (base == "/autoriego") {
     if (args.isEmpty()) return String("Riego automático está ") + (isAutoIrrigationEnabled() ? "ON" : "OFF");
     setAutoIrrigationEnabled(parseOnOff(args));
     return String("Riego automático ") + (isAutoIrrigationEnabled() ? "activado" : "desactivado");
   }
 
-  if (base == "/fanauto") {
+  if (base == "/ventauto") {
     if (args.isEmpty()) return String("Ventilador automático está ") + (fanAuto ? "ON" : "OFF");
     fanAuto = parseOnOff(args);
     updateFanControl(true);
     return String("Ventilador automático ") + (fanAuto ? "ON" : "OFF");
   }
 
-  if (base == "/fan") {
+  if (base == "/vent") {
     int pct = args.toInt();
     pct = constrain(pct, 0, 100);
     fanPercent = pct;
