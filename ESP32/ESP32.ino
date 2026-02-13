@@ -1110,6 +1110,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   }
 
   if (base == "/vent_auto") {
+    if (args.isEmpty()) return String("Control automático de ventilador está ") + (fanAuto ? "ON" : "OFF");
     fanAuto = parseOnOff(args);
     updateFanControl(true);
     return String("Control automático de ventilador ") + (fanAuto ? "ON" : "OFF");
@@ -1128,7 +1129,8 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     float ml = args.toFloat();
     if (ml <= 0) return "Uso: /regar [mL]";
     ml = min(ml, 1500.0f);
-    if (!isPumpCalibrated()) return "Bomba sin calibrar. Ejecuta /caudal antes de regar.";
+    if (!isPumpCalibrated()) return "Bomba sin calibrar. Ejecuta /calibrar antes de regar.";
+    if (!isTankWaterAvailable()) return "Tanque sin agua. Verifica el nivel del tanque.";
     irrigateVolume(ml, readSoilMoisture());
     return "Riego manual por " + String(ml) + " mL";
   }
@@ -1411,12 +1413,18 @@ void requestCredentials() {
 // =========================================================
 //  INICIALIZACIÓN DE RED Y SERVICIOS
 // =========================================================
-bool connectToWifi(const String &ssid, const String &password) {
+bool connectToWifi(const String &ssid, const String &password, unsigned long timeoutMs = 30000) {
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid.c_str(), password.c_str());
 
   Serial.print("Conectando a WiFi");
+  unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED) {
+    if (millis() - start >= timeoutMs) {
+      Serial.println();
+      Serial.println("Timeout: no se pudo conectar a WiFi.");
+      return false;
+    }
     delay(500);
     Serial.print('.');
   }

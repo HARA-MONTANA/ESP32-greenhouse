@@ -36,3 +36,6 @@ bool setSoilHighThreshold(int threshold);
 bool setIrrigationIntervalDays(int days);
 void setLastIrrigationEpoch(unsigned long epochSeconds);
 bool setLightHoursForStage(plantStage stage, int hours);
+
+bool getAutoIrrigationStored();
+void setAutoIrrigationStored(bool enabled);

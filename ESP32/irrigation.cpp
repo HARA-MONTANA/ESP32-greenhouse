@@ -14,6 +14,8 @@ const int R_Agua = PIN_RELE1;
 const int PUMP_ON_LEVEL = HIGH;
 const int PUMP_OFF_LEVEL = LOW;
 bool autoIrrigationEnabled = false;
+bool tankEmptyNotified = false;
+bool pumpNotCalibratedNotified = false;
 
 struct PulseSummary {
   int finalAdc;
@@ -66,6 +68,7 @@ void initIrrigationHardware() {
   pinMode(R_Agua, OUTPUT);
   digitalWrite(R_Agua, PUMP_OFF_LEVEL);
   pinMode(PIN_FLOAT, INPUT_PULLUP);
+  autoIrrigationEnabled = getAutoIrrigationStored();
 }
 
 void pumpOn() { digitalWrite(R_Agua, PUMP_ON_LEVEL); }
@@ -81,13 +84,26 @@ bool checkSoilAndIrrigate() {
   const int soilPercent = soilPercentFromAdc(soilReading);
 
   if (!isPumpCalibrated()) {
-    broadcastMessage("Riego omitido: bomba sin calibrar.");
+    if (!pumpNotCalibratedNotified) {
+      broadcastMessage("Riego omitido: bomba sin calibrar.");
+      pumpNotCalibratedNotified = true;
+    }
     return false;
   }
+  pumpNotCalibratedNotified = false;
 
   if (!autoIrrigationEnabled) {
     return false;
   }
+
+  if (!isTankWaterAvailable()) {
+    if (!tankEmptyNotified) {
+      broadcastMessage("Riego omitido: tanque sin agua.");
+      tankEmptyNotified = true;
+    }
+    return false;
+  }
+  tankEmptyNotified = false;
 
   const int highThreshold = getSoilHighThreshold();
   if (highThreshold > 0 && soilPercent >= highThreshold) {
@@ -172,6 +188,9 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
   }
 }
 
-void setAutoIrrigationEnabled(bool enabled) { autoIrrigationEnabled = enabled; }
+void setAutoIrrigationEnabled(bool enabled) {
+  autoIrrigationEnabled = enabled;
+  setAutoIrrigationStored(enabled);
+}
 
 bool isAutoIrrigationEnabled() { return autoIrrigationEnabled; }
