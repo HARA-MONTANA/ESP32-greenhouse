@@ -1084,6 +1084,7 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
   }
 
   if (base == "/calibrar") {
+    if (isIrrigating()) return "Riego en curso, espera a que termine antes de calibrar.";
     awaitingCalibrationVolume = true;
     pumpOn();
     delay(5000);
@@ -1129,8 +1130,9 @@ String handleTelegramCommand(const String &chatId, const String &text, bool &upd
     if (ml <= 0) return "Uso: /regar [mL]";
     ml = min(ml, 1500.0f);
     if (!isPumpCalibrated()) return "Bomba sin calibrar. Ejecuta /caudal antes de regar.";
+    if (isIrrigating()) return "Riego en curso, espera a que termine.";
     irrigateVolume(ml, readSoilMoisture());
-    return "Riego manual por " + String(ml) + " mL";
+    return "Riego manual iniciado: " + String(ml) + " mL";
   }
 
   if (base == "/reportes") {
@@ -1737,6 +1739,7 @@ void loop() {
   handleSerialCommands();
   pollTelegram();
   sendPeriodicStatusIfNeeded();
+  updateIrrigation();
 
   const unsigned long now = millis();
 

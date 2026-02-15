@@ -14,6 +14,16 @@ const int R_Agua = PIN_RELE1;
 const int PUMP_ON_LEVEL = HIGH;
 const int PUMP_OFF_LEVEL = LOW;
 bool autoIrrigationEnabled = false;
+
+enum IrrigationState { IRR_IDLE, IRR_PUMPING, IRR_SETTLING };
+IrrigationState irrState = IRR_IDLE;
+unsigned long stateStartMs = 0;
+unsigned long irrPumpTimeMs = 0;
+float irrTotalMl = 0.0f;
+int irrInitialAdc = 0;
+int irrInitialPercent = 0;
+plantStage irrStage = PLANTULA;
+const unsigned long SETTLE_TIME_MS = 5000;
 }
 
 void initIrrigationHardware() {
@@ -31,6 +41,10 @@ int readSoilMoisture() { return analogRead(PIN_SUELO); }
 bool isTankWaterAvailable() { return digitalRead(PIN_FLOAT) == LOW; }
 
 bool checkSoilAndIrrigate() {
+  if (isIrrigating()) {
+    return false;
+  }
+
   const int soilReading = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilReading);
 
@@ -80,7 +94,11 @@ void irrigate(int initialSoilReading) {
 }
 
 void irrigateVolume(float totalMl, int initialSoilReading) {
-  plantStage stage = getCurrentStage();
+  if (irrState != IRR_IDLE) {
+    broadcastMessage("Riego en curso, solicitud ignorada.");
+    return;
+  }
+
   const float pumpFlow = getPumpFlow();
 
   if (!isPumpCalibrated()) {
@@ -93,38 +111,66 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
     return;
   }
 
-  const int initialAdc = initialSoilReading >= 0 ? initialSoilReading : readSoilMoisture();
-  const int initialPercent = soilPercentFromAdc(initialAdc);
-
-  const unsigned long pumpTimeMs = static_cast<unsigned long>((totalMl / pumpFlow) * 1000.0f);
+  irrStage = getCurrentStage();
+  irrTotalMl = totalMl;
+  irrInitialAdc = initialSoilReading >= 0 ? initialSoilReading : readSoilMoisture();
+  irrInitialPercent = soilPercentFromAdc(irrInitialAdc);
+  irrPumpTimeMs = static_cast<unsigned long>((totalMl / pumpFlow) * 1000.0f);
 
   pumpOn();
-  delay(pumpTimeMs);
-  pumpOff();
+  stateStartMs = millis();
+  irrState = IRR_PUMPING;
+}
 
-  delay(5000);
-
-  const int finalAdc = readSoilMoisture();
-  const int finalPercent = soilPercentFromAdc(finalAdc);
-
-  String logMsg = "Riego completado | Etapa: " + stageToString(stage);
-  logMsg += " | Volumen: " + String(totalMl, 1) + " mL";
-  logMsg += " | Bomba ON: " + String(pumpTimeMs / 1000.0f, 1) + " s";
-  logMsg += " | Humedad: " + String(initialPercent) + "% -> " + String(finalPercent) + "%";
-  logMsg += " (ADC " + String(initialAdc) + " -> " + String(finalAdc) + ")";
-
-  broadcastMessage(logMsg);
-
-  if (finalPercent <= initialPercent) {
-    broadcastMessage("⚠️ Riego sin incremento de humedad; verifica bomba, mangueras y válvulas.");
+void updateIrrigation() {
+  if (irrState == IRR_IDLE) {
+    return;
   }
 
-  time_t now;
-  time(&now);
-  if (now > 0) {
-    setLastIrrigationEpoch(static_cast<unsigned long>(now));
+  const unsigned long now = millis();
+
+  switch (irrState) {
+    case IRR_PUMPING:
+      if (now - stateStartMs >= irrPumpTimeMs) {
+        pumpOff();
+        stateStartMs = now;
+        irrState = IRR_SETTLING;
+      }
+      break;
+
+    case IRR_SETTLING:
+      if (now - stateStartMs >= SETTLE_TIME_MS) {
+        const int finalAdc = readSoilMoisture();
+        const int finalPercent = soilPercentFromAdc(finalAdc);
+
+        String logMsg = "Riego completado | Etapa: " + stageToString(irrStage);
+        logMsg += " | Volumen: " + String(irrTotalMl, 1) + " mL";
+        logMsg += " | Bomba ON: " + String(irrPumpTimeMs / 1000.0f, 1) + " s";
+        logMsg += " | Humedad: " + String(irrInitialPercent) + "% -> " + String(finalPercent) + "%";
+        logMsg += " (ADC " + String(irrInitialAdc) + " -> " + String(finalAdc) + ")";
+
+        broadcastMessage(logMsg);
+
+        if (finalPercent <= irrInitialPercent) {
+          broadcastMessage("⚠️ Riego sin incremento de humedad; verifica bomba, mangueras y válvulas.");
+        }
+
+        time_t nowEpoch;
+        time(&nowEpoch);
+        if (nowEpoch > 0) {
+          setLastIrrigationEpoch(static_cast<unsigned long>(nowEpoch));
+        }
+
+        irrState = IRR_IDLE;
+      }
+      break;
+
+    default:
+      break;
   }
 }
+
+bool isIrrigating() { return irrState != IRR_IDLE; }
 
 void setAutoIrrigationEnabled(bool enabled) { autoIrrigationEnabled = enabled; }
 
