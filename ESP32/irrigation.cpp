@@ -14,52 +14,6 @@ const int R_Agua = PIN_RELE1;
 const int PUMP_ON_LEVEL = HIGH;
 const int PUMP_OFF_LEVEL = LOW;
 bool autoIrrigationEnabled = false;
-
-struct PulseSummary {
-  int finalAdc;
-  int finalPercent;
-  float deliveredMl;
-  unsigned long totalOnTimeMs;
-  unsigned long totalDurationMs;
-  unsigned int pulseCount;
-  unsigned long absorptionMs;
-};
-
-PulseSummary runPulsedIrrigation(float totalMl, float pumpFlow, int targetPercent, int highThreshold, int initialAdc) {
-  const float estimatedPumpTimeMs = (totalMl / pumpFlow) * 1000.0f;
-  const unsigned long basePulseOnMs = constrain(static_cast<unsigned long>(estimatedPumpTimeMs / 6.0f), 500UL, 3000UL);
-  const unsigned long absorptionMs = max(basePulseOnMs * 3UL, 5000UL);
-
-  PulseSummary summary{};
-  summary.finalAdc = initialAdc;
-  summary.finalPercent = soilPercentFromAdc(initialAdc);
-  summary.absorptionMs = absorptionMs;
-
-  const unsigned long startMs = millis();
-
-  while (summary.deliveredMl < totalMl && summary.finalPercent < targetPercent && summary.finalPercent < highThreshold) {
-    const float remainingMl = totalMl - summary.deliveredMl;
-    const unsigned long remainingOnMs = static_cast<unsigned long>((remainingMl / pumpFlow) * 1000.0f);
-    unsigned long pulseOnMs = min(basePulseOnMs, remainingOnMs);
-    pulseOnMs = max(pulseOnMs, 300UL);
-
-    digitalWrite(R_Agua, PUMP_ON_LEVEL);
-    delay(pulseOnMs);
-    digitalWrite(R_Agua, PUMP_OFF_LEVEL);
-
-    summary.pulseCount++;
-    summary.totalOnTimeMs += pulseOnMs;
-    summary.deliveredMl += pumpFlow * (pulseOnMs / 1000.0f);
-
-    delay(absorptionMs);
-
-    summary.finalAdc = readSoilMoisture();
-    summary.finalPercent = soilPercentFromAdc(summary.finalAdc);
-  }
-
-  summary.totalDurationMs = millis() - startMs;
-  return summary;
-}
 }
 
 void initIrrigationHardware() {
@@ -141,23 +95,23 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
 
   const int initialAdc = initialSoilReading >= 0 ? initialSoilReading : readSoilMoisture();
   const int initialPercent = soilPercentFromAdc(initialAdc);
-  const int targetPercent = getSoilThreshold();
-  const int highThreshold = getSoilHighThreshold();
 
-  const PulseSummary summary = runPulsedIrrigation(totalMl, pumpFlow, targetPercent, highThreshold, initialAdc);
+  const unsigned long pumpTimeMs = static_cast<unsigned long>((totalMl / pumpFlow) * 1000.0f);
 
-  const int finalReading = summary.finalAdc;
-  const int finalPercent = summary.finalPercent;
+  pumpOn();
+  delay(pumpTimeMs);
+  pumpOff();
+
+  delay(5000);
+
+  const int finalAdc = readSoilMoisture();
+  const int finalPercent = soilPercentFromAdc(finalAdc);
 
   String logMsg = "Riego completado | Etapa: " + stageToString(stage);
-  logMsg += " | Volumen solicitado: " + String(totalMl, 1) + " mL";
-  logMsg += " | Volumen entregado: " + String(summary.deliveredMl, 1) + " mL";
-  logMsg += " | Pulsos: " + String(summary.pulseCount);
-  logMsg += " | ON acumulado: " + String(summary.totalOnTimeMs / 1000.0f, 1) + " s";
-  logMsg += " | Tiempo total: " + String(summary.totalDurationMs / 1000.0f, 1) + " s";
-  logMsg += " | Absorción entre pulsos: " + String(summary.absorptionMs / 1000.0f, 1) + " s";
-  logMsg += " | Humedad: " + String(initialPercent) + "% → " + String(finalPercent) + "% (ADC " + String(initialAdc) +
-            " → " + String(finalReading) + ")";
+  logMsg += " | Volumen: " + String(totalMl, 1) + " mL";
+  logMsg += " | Bomba ON: " + String(pumpTimeMs / 1000.0f, 1) + " s";
+  logMsg += " | Humedad: " + String(initialPercent) + "% -> " + String(finalPercent) + "%";
+  logMsg += " (ADC " + String(initialAdc) + " -> " + String(finalAdc) + ")";
 
   broadcastMessage(logMsg);
 
