@@ -5,79 +5,41 @@
 
 #include "pins.h"
 
-// Declarada en ESP32.ino para reenviar a Serial y Telegram
+// Declarada en ESP32.ino
 void broadcastMessage(const String &msg);
 String stageToString(plantStage stage);
 
 namespace {
-const int R_Agua = PIN_RELE1;
 const int PUMP_ON_LEVEL = HIGH;
 const int PUMP_OFF_LEVEL = LOW;
 bool autoIrrigationEnabled = false;
 bool tankEmptyNotified = false;
 bool pumpNotCalibratedNotified = false;
-
-struct PulseSummary {
-  int finalAdc;
-  int finalPercent;
-  float deliveredMl;
-  unsigned long totalOnTimeMs;
-  unsigned long totalDurationMs;
-  unsigned int pulseCount;
-  unsigned long absorptionMs;
-};
-
-PulseSummary runPulsedIrrigation(float totalMl, float pumpFlow, int targetPercent, int highThreshold, int initialAdc) {
-  const float estimatedPumpTimeMs = (totalMl / pumpFlow) * 1000.0f;
-  const unsigned long basePulseOnMs = constrain(static_cast<unsigned long>(estimatedPumpTimeMs / 6.0f), 500UL, 3000UL);
-  const unsigned long absorptionMs = max(basePulseOnMs * 3UL, 5000UL);
-
-  PulseSummary summary{};
-  summary.finalAdc = initialAdc;
-  summary.finalPercent = soilPercentFromAdc(initialAdc);
-  summary.absorptionMs = absorptionMs;
-
-  const unsigned long startMs = millis();
-
-  while (summary.deliveredMl < totalMl && summary.finalPercent < targetPercent && summary.finalPercent < highThreshold) {
-    const float remainingMl = totalMl - summary.deliveredMl;
-    const unsigned long remainingOnMs = static_cast<unsigned long>((remainingMl / pumpFlow) * 1000.0f);
-    unsigned long pulseOnMs = min(basePulseOnMs, remainingOnMs);
-    pulseOnMs = max(pulseOnMs, 300UL);
-
-    digitalWrite(R_Agua, PUMP_ON_LEVEL);
-    delay(pulseOnMs);
-    digitalWrite(R_Agua, PUMP_OFF_LEVEL);
-
-    summary.pulseCount++;
-    summary.totalOnTimeMs += pulseOnMs;
-    summary.deliveredMl += pumpFlow * (pulseOnMs / 1000.0f);
-
-    delay(absorptionMs);
-
-    summary.finalAdc = readSoilMoisture();
-    summary.finalPercent = soilPercentFromAdc(summary.finalAdc);
-  }
-
-  summary.totalDurationMs = millis() - startMs;
-  return summary;
-}
-}
+}  // namespace
 
 void initIrrigationHardware() {
-  pinMode(R_Agua, OUTPUT);
-  digitalWrite(R_Agua, PUMP_OFF_LEVEL);
+  pinMode(PIN_RELE1, OUTPUT);
+  digitalWrite(PIN_RELE1, PUMP_OFF_LEVEL);
   pinMode(PIN_FLOAT, INPUT_PULLUP);
   autoIrrigationEnabled = getAutoIrrigationStored();
 }
 
-void pumpOn() { digitalWrite(R_Agua, PUMP_ON_LEVEL); }
-
-void pumpOff() { digitalWrite(R_Agua, PUMP_OFF_LEVEL); }
+void pumpOn() { digitalWrite(PIN_RELE1, PUMP_ON_LEVEL); }
+void pumpOff() { digitalWrite(PIN_RELE1, PUMP_OFF_LEVEL); }
 
 int readSoilMoisture() { return analogRead(PIN_SUELO); }
 
 bool isTankWaterAvailable() { return digitalRead(PIN_FLOAT) == LOW; }
+
+int soilPercentFromAdc(int reading) {
+  const int dryAdc = getSoilDryAdc();
+  const int wetAdc = getSoilWetAdc();
+  const int minR = min(wetAdc, dryAdc);
+  const int maxR = max(wetAdc, dryAdc);
+  int clamped = constrain(reading, minR, maxR);
+  int percent = map(clamped, wetAdc, dryAdc, 100, 0);
+  return constrain(percent, 0, 100);
+}
 
 bool checkSoilAndIrrigate() {
   const int soilReading = readSoilMoisture();
@@ -92,9 +54,7 @@ bool checkSoilAndIrrigate() {
   }
   pumpNotCalibratedNotified = false;
 
-  if (!autoIrrigationEnabled) {
-    return false;
-  }
+  if (!autoIrrigationEnabled) return false;
 
   if (!isTankWaterAvailable()) {
     if (!tankEmptyNotified) {
@@ -107,14 +67,10 @@ bool checkSoilAndIrrigate() {
 
   const int highThreshold = getSoilHighThreshold();
   if (highThreshold > 0 && soilPercent >= highThreshold) {
-    broadcastMessage("Riego omitido: humedad alta detectada en suelo (" + String(soilPercent) + "% >= " + String(highThreshold) +
-                     "%).");
     return false;
   }
 
-  if (soilPercent >= getSoilThreshold()) {
-    return false;
-  }
+  if (soilPercent >= getSoilThreshold()) return false;
 
   const int intervalDays = max(getIrrigationIntervalDays(), 0);
   const unsigned long intervalSeconds = static_cast<unsigned long>(intervalDays) * 86400UL;
@@ -133,32 +89,21 @@ bool checkSoilAndIrrigate() {
 }
 
 void irrigate(int initialSoilReading) {
-  plantStage stage = getCurrentStage();
-  const int mlPerLiter = getMlPerLiterForStage(stage);
-  const float potL = getPotVolumeL();
-
-  const float totalMl = mlPerLiter * potL;
+  const float totalMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
   irrigateVolume(totalMl, initialSoilReading);
 }
 
 void irrigateVolume(float totalMl, int initialSoilReading) {
-  plantStage stage = getCurrentStage();
-  const float pumpFlow = getPumpFlow();
+  const float flow = getPumpFlow();
 
-  if (!isPumpCalibrated()) {
-    broadcastMessage("Riego omitido: calibra la bomba para calcular el caudal.");
-    return;
-  }
-
-  if (pumpFlow <= 0.0f) {
-    broadcastMessage("Riego omitido: caudal de bomba inválido.");
+  if (!isPumpCalibrated() || flow <= 0.0f) {
+    broadcastMessage("Riego omitido: bomba sin calibrar.");
     return;
   }
 
   const int initialAdc = initialSoilReading >= 0 ? initialSoilReading : readSoilMoisture();
   const int initialPercent = soilPercentFromAdc(initialAdc);
-
-  const unsigned long pumpTimeMs = static_cast<unsigned long>((totalMl / pumpFlow) * 1000.0f);
+  const unsigned long pumpTimeMs = static_cast<unsigned long>((totalMl / flow) * 1000.0f);
 
   pumpOn();
   delay(pumpTimeMs);
@@ -169,16 +114,14 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
   const int finalAdc = readSoilMoisture();
   const int finalPercent = soilPercentFromAdc(finalAdc);
 
-  String logMsg = "Riego completado | Etapa: " + stageToString(stage);
-  logMsg += " | Volumen: " + String(totalMl, 1) + " mL";
-  logMsg += " | Bomba ON: " + String(pumpTimeMs / 1000.0f, 1) + " s";
-  logMsg += " | Humedad: " + String(initialPercent) + "% -> " + String(finalPercent) + "%";
-  logMsg += " (ADC " + String(initialAdc) + " -> " + String(finalAdc) + ")";
-
-  broadcastMessage(logMsg);
+  String msg = "Riego completado | Etapa: " + stageToString(getCurrentStage());
+  msg += " | " + String(totalMl, 1) + " mL";
+  msg += " | Bomba: " + String(pumpTimeMs / 1000.0f, 1) + " s";
+  msg += " | Suelo: " + String(initialPercent) + "% -> " + String(finalPercent) + "%";
+  broadcastMessage(msg);
 
   if (finalPercent <= initialPercent) {
-    broadcastMessage("⚠️ Riego sin incremento de humedad; verifica bomba, mangueras y válvulas.");
+    broadcastMessage("Riego sin incremento de humedad; verifica bomba y mangueras.");
   }
 
   time_t now;
