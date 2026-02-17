@@ -2,7 +2,7 @@
 
 // --- Sensores ---
 #define PIN_DHT       25
-#define PIN_LED_MOSFET 26   // MOSFET LEDs
+#define PIN_LED_MORADO 26   // MOSFET — LED morado
 #define PIN_CRED_SKIP 27    // Botón para usar credenciales almacenadas (activo en LOW)
 #define PIN_MQ135     34   // ADC1 input-only
 #define PIN_SUELO     32   // ADC1
