@@ -3,154 +3,138 @@
 #include <Arduino.h>
 
 namespace {
-Preferences irrigationPrefs;
+Preferences prefs;
 bool prefsStarted = false;
 
-// Valores por defecto
-int mlPl = 50;   // Plántula
-int mlVeg = 100; // Vegetativo
-int mlPre = 150; // Pre floración
-int mlFlo = 200; // Floración
-int mlFin = 120; // Final
+// --- Valores de riego/planta ---
+int mlPl = 50;
+int mlVeg = 100;
+int mlPre = 150;
+int mlFlo = 200;
+int mlFin = 120;
 int lightHoursPl = 18;
 int lightHoursVeg = 18;
-int lightHoursPre = 12;
-int lightHoursFlo = 12;
-int lightHoursFin = 12;
 float potVolumeL = 15.0f;
-float pumpFlow = 0.0f;        // mL/s
+float pumpFlow = 0.0f;
 bool pumpCalibrated = false;
-int soilThreshold = 20;       // Porcentaje mínimo antes de regar
-int soilHighThreshold = 65;   // Porcentaje máximo permitido
+int soilThreshold = 20;
+int soilHighThreshold = 65;
 int irrigationIntervalDays = 2;
 unsigned long lastIrrigationEpoch = 0;
 bool autoIrrigationStored = false;
 plantStage currentStage = PLANTULA;
 
+// --- Valores de runtime (antes en namespace "runtime") ---
+int soilDryAdc = 2150;
+int soilWetAdc = 500;
+int tempAlertThreshold = 30;
+int rhLowAlertThreshold = 50;
+int rhHighAlertThreshold = 50;
+int mqAlertThreshold = 500;
+bool autoReadingsEnabled = false;
+unsigned long autoReadingsIntervalMs = 300000;
+int timezoneOffsetHours = -5;
+
 void ensurePrefs() {
   if (!prefsStarted) {
-    prefsStarted = irrigationPrefs.begin("irrigation", false);
+    prefsStarted = prefs.begin("config", false);
   }
 }
 
-int clampAndStoreMlDefaults(const char *key, int defaultValue) {
-  const int stored = irrigationPrefs.isKey(key) ? irrigationPrefs.getInt(key, defaultValue) : defaultValue;
-  const int clamped = constrain(stored, 5, 200);
-  irrigationPrefs.putInt(key, clamped);
-  return clamped;
+int clampMl(const char *key, int defaultValue) {
+  int val = prefs.isKey(key) ? prefs.getInt(key, defaultValue) : defaultValue;
+  return constrain(val, 5, 200);
 }
 
-int clampAndStoreLightHours(const char *key, int defaultValue) {
-  const int stored = irrigationPrefs.isKey(key) ? irrigationPrefs.getInt(key, defaultValue) : defaultValue;
-  const int clamped = constrain(stored, 12, 20);
-  irrigationPrefs.putInt(key, clamped);
-  return clamped;
+int clampLightHours(const char *key, int defaultValue) {
+  int val = prefs.isKey(key) ? prefs.getInt(key, defaultValue) : defaultValue;
+  return constrain(val, 12, 20);
 }
 
 }  // namespace
 
 void configInit() {
   ensurePrefs();
-}
 
-void configLoad() {
-  ensurePrefs();
+  // Riego
+  mlPl = clampMl("ml_pl", mlPl);
+  mlVeg = clampMl("ml_veg", mlVeg);
+  mlPre = clampMl("ml_pre", mlPre);
+  mlFlo = clampMl("ml_flo", mlFlo);
+  mlFin = clampMl("ml_fin", mlFin);
 
-  mlPl = clampAndStoreMlDefaults("ml_pl", mlPl);
-  mlVeg = clampAndStoreMlDefaults("ml_veg", mlVeg);
-  mlPre = clampAndStoreMlDefaults("ml_pre", mlPre);
-  mlFlo = clampAndStoreMlDefaults("ml_flo", mlFlo);
-  mlFin = clampAndStoreMlDefaults("ml_fin", mlFin);
+  lightHoursPl = clampLightHours("lh_pl", lightHoursPl);
+  lightHoursVeg = clampLightHours("lh_veg", lightHoursVeg);
+  // Pre/flo/fin siempre 12h, no se guardan
 
-  lightHoursPl = clampAndStoreLightHours("lh_pl", lightHoursPl);
-  lightHoursVeg = clampAndStoreLightHours("lh_veg", lightHoursVeg);
-  // Etapas posteriores usan 12h fijas, se restablecen en NVS por si hubo ediciones previas.
-  lightHoursPre = 12;
-  lightHoursFlo = 12;
-  lightHoursFin = 12;
-  irrigationPrefs.putInt("lh_pre", lightHoursPre);
-  irrigationPrefs.putInt("lh_flo", lightHoursFlo);
-  irrigationPrefs.putInt("lh_fin", lightHoursFin);
+  potVolumeL = constrain(prefs.getFloat("potL", potVolumeL), 1.0f, 50.0f);
 
-  if (!irrigationPrefs.isKey("potL")) {
-    irrigationPrefs.putFloat("potL", potVolumeL);
-  }
-  potVolumeL = constrain(irrigationPrefs.getFloat("potL", potVolumeL), 1.0f, 50.0f);
-  irrigationPrefs.putFloat("potL", potVolumeL);
-
-  if (!irrigationPrefs.isKey("flow")) {
-    irrigationPrefs.putFloat("flow", pumpFlow);
-  }
-  pumpFlow = irrigationPrefs.getFloat("flow", pumpFlow);
-
-  if (irrigationPrefs.isKey("flowCal")) {
-    pumpCalibrated = irrigationPrefs.getBool("flowCal", pumpCalibrated);
-  } else {
-    pumpCalibrated = irrigationPrefs.isKey("flow") && pumpFlow > 0.0f;
-  }
-
+  pumpFlow = prefs.getFloat("flow", pumpFlow);
+  pumpCalibrated = prefs.getBool("flowCal", false);
   if (pumpFlow > 0.0f && (pumpFlow < 1.0f || pumpFlow > 50.0f)) {
     pumpFlow = 0.0f;
     pumpCalibrated = false;
-    irrigationPrefs.putFloat("flow", pumpFlow);
-    irrigationPrefs.putBool("flowCal", pumpCalibrated);
   }
-
   if (!pumpCalibrated) {
     pumpFlow = 0.0f;
-    irrigationPrefs.putFloat("flow", pumpFlow);
   }
 
-  if (!irrigationPrefs.isKey("soilTh")) {
-    irrigationPrefs.putInt("soilTh", soilThreshold);
+  soilThreshold = constrain(prefs.getInt("soilTh", soilThreshold), 0, 50);
+  soilHighThreshold = constrain(prefs.getInt("soilHigh", soilHighThreshold), 50, 100);
+  irrigationIntervalDays = constrain(prefs.getInt("intDays", irrigationIntervalDays), 1, 5);
+  lastIrrigationEpoch = prefs.getULong("lastIr", lastIrrigationEpoch);
+  autoIrrigationStored = prefs.getBool("autoIr", autoIrrigationStored);
+  currentStage = static_cast<plantStage>(prefs.getInt("stage", static_cast<int>(currentStage)));
+
+  // Runtime
+  soilDryAdc = constrain(prefs.getInt("soilDry", soilDryAdc), 0, 4095);
+  soilWetAdc = constrain(prefs.getInt("soilWet", soilWetAdc), 0, 4095);
+  if (soilDryAdc == soilWetAdc) {
+    soilDryAdc = min(soilWetAdc + 1, 4095);
   }
-  soilThreshold = constrain(irrigationPrefs.getInt("soilTh", soilThreshold), 0, 50);
-  irrigationPrefs.putInt("soilTh", soilThreshold);
 
-  if (!irrigationPrefs.isKey("soilHigh")) {
-    irrigationPrefs.putInt("soilHigh", soilHighThreshold);
-  }
-  soilHighThreshold = constrain(irrigationPrefs.getInt("soilHigh", soilHighThreshold), 50, 100);
-  irrigationPrefs.putInt("soilHigh", soilHighThreshold);
+  tempAlertThreshold = constrain(prefs.getInt("tempHi", tempAlertThreshold), 1, 100);
+  rhLowAlertThreshold = constrain(prefs.getInt("rhLow", rhLowAlertThreshold), 1, 100);
+  rhHighAlertThreshold = constrain(prefs.getInt("rhHigh", rhHighAlertThreshold), 1, 100);
+  mqAlertThreshold = max(prefs.getInt("mqTh", mqAlertThreshold), 1);
 
-  if (!irrigationPrefs.isKey("intDays")) {
-    irrigationPrefs.putInt("intDays", irrigationIntervalDays);
-  }
-  irrigationIntervalDays = constrain(irrigationPrefs.getInt("intDays", irrigationIntervalDays), 1, 5);
-  irrigationPrefs.putInt("intDays", irrigationIntervalDays);
+  autoReadingsEnabled = prefs.getBool("autoRpt", autoReadingsEnabled);
+  autoReadingsIntervalMs = max(prefs.getUInt("autoInt", autoReadingsIntervalMs), 60000UL);
 
-  lastIrrigationEpoch = irrigationPrefs.getULong("lastIr", lastIrrigationEpoch);
-
-  autoIrrigationStored = irrigationPrefs.getBool("autoIr", autoIrrigationStored);
-
-  if (!irrigationPrefs.isKey("stage")) {
-    irrigationPrefs.putInt("stage", static_cast<int>(currentStage));
-  }
-  currentStage = static_cast<plantStage>(irrigationPrefs.getInt("stage", static_cast<int>(currentStage)));
+  timezoneOffsetHours = constrain(prefs.getInt("tzOff", timezoneOffsetHours), -12, 14);
 }
 
 void configSave() {
   ensurePrefs();
 
-  irrigationPrefs.putInt("ml_pl", mlPl);
-  irrigationPrefs.putInt("ml_veg", mlVeg);
-  irrigationPrefs.putInt("ml_pre", mlPre);
-  irrigationPrefs.putInt("ml_flo", mlFlo);
-  irrigationPrefs.putInt("ml_fin", mlFin);
-  irrigationPrefs.putInt("lh_pl", lightHoursPl);
-  irrigationPrefs.putInt("lh_veg", lightHoursVeg);
-  irrigationPrefs.putInt("lh_pre", lightHoursPre);
-  irrigationPrefs.putInt("lh_flo", lightHoursFlo);
-  irrigationPrefs.putInt("lh_fin", lightHoursFin);
-  irrigationPrefs.putFloat("potL", potVolumeL);
-  irrigationPrefs.putFloat("flow", pumpFlow);
-  irrigationPrefs.putBool("flowCal", pumpCalibrated);
-  irrigationPrefs.putInt("soilTh", soilThreshold);
-  irrigationPrefs.putInt("soilHigh", soilHighThreshold);
-  irrigationPrefs.putInt("intDays", irrigationIntervalDays);
-  irrigationPrefs.putULong("lastIr", lastIrrigationEpoch);
-  irrigationPrefs.putBool("autoIr", autoIrrigationStored);
-  irrigationPrefs.putInt("stage", static_cast<int>(currentStage));
+  // Riego
+  prefs.putInt("ml_pl", mlPl);
+  prefs.putInt("ml_veg", mlVeg);
+  prefs.putInt("ml_pre", mlPre);
+  prefs.putInt("ml_flo", mlFlo);
+  prefs.putInt("ml_fin", mlFin);
+  prefs.putInt("lh_pl", lightHoursPl);
+  prefs.putInt("lh_veg", lightHoursVeg);
+  prefs.putFloat("potL", potVolumeL);
+  prefs.putFloat("flow", pumpFlow);
+  prefs.putBool("flowCal", pumpCalibrated);
+  prefs.putInt("soilTh", soilThreshold);
+  prefs.putInt("soilHigh", soilHighThreshold);
+  prefs.putInt("intDays", irrigationIntervalDays);
+  prefs.putULong("lastIr", lastIrrigationEpoch);
+  prefs.putBool("autoIr", autoIrrigationStored);
+  prefs.putInt("stage", static_cast<int>(currentStage));
+
+  // Runtime
+  prefs.putInt("soilDry", soilDryAdc);
+  prefs.putInt("soilWet", soilWetAdc);
+  prefs.putInt("tempHi", tempAlertThreshold);
+  prefs.putInt("rhLow", rhLowAlertThreshold);
+  prefs.putInt("rhHigh", rhHighAlertThreshold);
+  prefs.putInt("mqTh", mqAlertThreshold);
+  prefs.putBool("autoRpt", autoReadingsEnabled);
+  prefs.putUInt("autoInt", autoReadingsIntervalMs);
+  prefs.putInt("tzOff", timezoneOffsetHours);
 }
 
 void configReset() {
@@ -161,9 +145,6 @@ void configReset() {
   mlFin = 120;
   lightHoursPl = 18;
   lightHoursVeg = 18;
-  lightHoursPre = 12;
-  lightHoursFlo = 12;
-  lightHoursFin = 12;
   potVolumeL = 15.0f;
   pumpFlow = 0.0f;
   pumpCalibrated = false;
@@ -173,195 +154,201 @@ void configReset() {
   lastIrrigationEpoch = 0;
   autoIrrigationStored = false;
   currentStage = PLANTULA;
+  soilDryAdc = 2150;
+  soilWetAdc = 500;
+  tempAlertThreshold = 30;
+  rhLowAlertThreshold = 50;
+  rhHighAlertThreshold = 50;
+  mqAlertThreshold = 500;
+  autoReadingsEnabled = false;
+  autoReadingsIntervalMs = 300000;
+  timezoneOffsetHours = -5;
   configSave();
 }
 
+// --- Getters riego/planta ---
+
+plantStage getCurrentStage() { return currentStage; }
+
 int getMlPerLiterForStage(plantStage stage) {
   switch (stage) {
-    case PLANTULA:
-      return mlPl;
-    case VEGETATIVO:
-      return mlVeg;
-    case PRE_FLORACION:
-      return mlPre;
-    case FLORACION:
-      return mlFlo;
-    case FINAL:
-      return mlFin;
-    default:
-      return mlVeg;
+    case PLANTULA:      return mlPl;
+    case VEGETATIVO:    return mlVeg;
+    case PRE_FLORACION: return mlPre;
+    case FLORACION:     return mlFlo;
+    case FINAL:         return mlFin;
+    default:            return mlVeg;
   }
 }
 
 int getLightHoursForStage(plantStage stage) {
   switch (stage) {
-    case PLANTULA:
-      return lightHoursPl;
-    case VEGETATIVO:
-      return lightHoursVeg;
-    case PRE_FLORACION:
-      return lightHoursPre;
-    case FLORACION:
-      return lightHoursFlo;
-    case FINAL:
-      return lightHoursFin;
-    default:
-      return lightHoursVeg;
+    case PLANTULA:   return lightHoursPl;
+    case VEGETATIVO: return lightHoursVeg;
+    default:         return 12;  // Pre/flo/fin siempre 12h
   }
 }
 
 float getPotVolumeL() { return potVolumeL; }
-
 float getPumpFlow() { return pumpFlow; }
-
 bool isPumpCalibrated() { return pumpCalibrated; }
-
 int getSoilThreshold() { return soilThreshold; }
-
 int getSoilHighThreshold() { return soilHighThreshold; }
-
 int getIrrigationIntervalDays() { return irrigationIntervalDays; }
-
 unsigned long getLastIrrigationEpoch() { return lastIrrigationEpoch; }
+bool getAutoIrrigationStored() { return autoIrrigationStored; }
 
-plantStage getCurrentStage() { return currentStage; }
+// --- Getters runtime ---
+
+int getTempAlertThreshold() { return tempAlertThreshold; }
+int getRhLowAlertThreshold() { return rhLowAlertThreshold; }
+int getRhHighAlertThreshold() { return rhHighAlertThreshold; }
+int getMqAlertThreshold() { return mqAlertThreshold; }
+int getSoilDryAdc() { return soilDryAdc; }
+int getSoilWetAdc() { return soilWetAdc; }
+bool getAutoReadingsEnabled() { return autoReadingsEnabled; }
+unsigned long getAutoReadingsIntervalMs() { return autoReadingsIntervalMs; }
+int getTimezoneOffsetHours() { return timezoneOffsetHours; }
+
+// --- Setters riego/planta ---
 
 void updateStage(plantStage newStage) {
   currentStage = newStage;
   ensurePrefs();
-  irrigationPrefs.putInt("stage", static_cast<int>(currentStage));
+  prefs.putInt("stage", static_cast<int>(currentStage));
 }
 
 bool setMlPerLiterForStage(plantStage stage, int value) {
-  if (value < 5 || value > 200) {
-    return false;
-  }
+  if (value < 5 || value > 200) return false;
   ensurePrefs();
   switch (stage) {
-    case PLANTULA:
-      mlPl = value;
-      irrigationPrefs.putInt("ml_pl", mlPl);
-      break;
-    case VEGETATIVO:
-      mlVeg = value;
-      irrigationPrefs.putInt("ml_veg", mlVeg);
-      break;
-    case PRE_FLORACION:
-      mlPre = value;
-      irrigationPrefs.putInt("ml_pre", mlPre);
-      break;
-    case FLORACION:
-      mlFlo = value;
-      irrigationPrefs.putInt("ml_flo", mlFlo);
-      break;
-    case FINAL:
-      mlFin = value;
-      irrigationPrefs.putInt("ml_fin", mlFin);
-      break;
-    default:
-      return false;
+    case PLANTULA:      mlPl = value;  prefs.putInt("ml_pl", mlPl); break;
+    case VEGETATIVO:    mlVeg = value; prefs.putInt("ml_veg", mlVeg); break;
+    case PRE_FLORACION: mlPre = value; prefs.putInt("ml_pre", mlPre); break;
+    case FLORACION:     mlFlo = value; prefs.putInt("ml_flo", mlFlo); break;
+    case FINAL:         mlFin = value; prefs.putInt("ml_fin", mlFin); break;
+    default: return false;
   }
-
   return true;
 }
 
 bool setPotVolumeL(float liters) {
-  if (liters < 1.0f || liters > 50.0f) {
-    return false;
-  }
-
+  if (liters < 1.0f || liters > 50.0f) return false;
   potVolumeL = liters;
   ensurePrefs();
-  irrigationPrefs.putFloat("potL", potVolumeL);
+  prefs.putFloat("potL", potVolumeL);
   return true;
 }
 
 bool setPumpFlow(float mlPerSecond) {
-  if (mlPerSecond < 1.0f || mlPerSecond > 50.0f) {
-    return false;
-  }
-
+  if (mlPerSecond < 1.0f || mlPerSecond > 50.0f) return false;
   pumpFlow = mlPerSecond;
   setPumpCalibrated(true);
   ensurePrefs();
-  irrigationPrefs.putFloat("flow", pumpFlow);
+  prefs.putFloat("flow", pumpFlow);
   return true;
 }
 
 void setPumpCalibrated(bool calibrated) {
   pumpCalibrated = calibrated;
   ensurePrefs();
-  irrigationPrefs.putBool("flowCal", pumpCalibrated);
+  prefs.putBool("flowCal", pumpCalibrated);
 }
 
 bool setSoilThreshold(int threshold) {
-  if (threshold < 0 || threshold > 50) {
-    return false;
-  }
-
+  if (threshold < 0 || threshold > 50) return false;
   soilThreshold = threshold;
   ensurePrefs();
-  irrigationPrefs.putInt("soilTh", soilThreshold);
+  prefs.putInt("soilTh", soilThreshold);
   return true;
 }
 
 bool setSoilHighThreshold(int threshold) {
-  if (threshold < 50 || threshold > 100) {
-    return false;
-  }
-
+  if (threshold < 50 || threshold > 100) return false;
   soilHighThreshold = threshold;
   ensurePrefs();
-  irrigationPrefs.putInt("soilHigh", soilHighThreshold);
+  prefs.putInt("soilHigh", soilHighThreshold);
   return true;
 }
 
 bool setIrrigationIntervalDays(int days) {
-  if (days < 1 || days > 5) {
-    return false;
-  }
-
+  if (days < 1 || days > 5) return false;
   irrigationIntervalDays = days;
   ensurePrefs();
-  irrigationPrefs.putInt("intDays", irrigationIntervalDays);
+  prefs.putInt("intDays", irrigationIntervalDays);
   return true;
 }
 
 void setLastIrrigationEpoch(unsigned long epochSeconds) {
   lastIrrigationEpoch = epochSeconds;
   ensurePrefs();
-  irrigationPrefs.putULong("lastIr", lastIrrigationEpoch);
+  prefs.putULong("lastIr", lastIrrigationEpoch);
 }
-
-bool getAutoIrrigationStored() { return autoIrrigationStored; }
 
 void setAutoIrrigationStored(bool enabled) {
   autoIrrigationStored = enabled;
   ensurePrefs();
-  irrigationPrefs.putBool("autoIr", autoIrrigationStored);
+  prefs.putBool("autoIr", autoIrrigationStored);
 }
 
 bool setLightHoursForStage(plantStage stage, int hours) {
-  if (hours < 12 || hours > 20) {
-    return false;
-  }
-
+  if (hours < 12 || hours > 20) return false;
   ensurePrefs();
   switch (stage) {
-    case PLANTULA:
-      lightHoursPl = hours;
-      irrigationPrefs.putInt("lh_pl", lightHoursPl);
-      break;
-    case VEGETATIVO:
-      lightHoursVeg = hours;
-      irrigationPrefs.putInt("lh_veg", lightHoursVeg);
-      break;
-    case PRE_FLORACION:
-    case FLORACION:
-    case FINAL:
-    default:
-      return false;
+    case PLANTULA:   lightHoursPl = hours;  prefs.putInt("lh_pl", lightHoursPl); break;
+    case VEGETATIVO: lightHoursVeg = hours; prefs.putInt("lh_veg", lightHoursVeg); break;
+    default: return false;  // Pre/flo/fin no se pueden editar
   }
-
   return true;
+}
+
+// --- Setters runtime ---
+
+void setTempAlertThreshold(int val) {
+  tempAlertThreshold = constrain(val, 1, 100);
+  ensurePrefs();
+  prefs.putInt("tempHi", tempAlertThreshold);
+}
+
+void setRhLowAlertThreshold(int val) {
+  rhLowAlertThreshold = constrain(val, 1, 100);
+  ensurePrefs();
+  prefs.putInt("rhLow", rhLowAlertThreshold);
+}
+
+void setRhHighAlertThreshold(int val) {
+  rhHighAlertThreshold = constrain(val, 1, 100);
+  ensurePrefs();
+  prefs.putInt("rhHigh", rhHighAlertThreshold);
+}
+
+void setMqAlertThreshold(int val) {
+  mqAlertThreshold = max(val, 1);
+  ensurePrefs();
+  prefs.putInt("mqTh", mqAlertThreshold);
+}
+
+void setSoilCalibration(int dryAdc, int wetAdc) {
+  soilDryAdc = constrain(dryAdc, 0, 4095);
+  soilWetAdc = constrain(wetAdc, 0, 4095);
+  if (soilDryAdc <= soilWetAdc) {
+    soilDryAdc = min(soilWetAdc + 1, 4095);
+  }
+  ensurePrefs();
+  prefs.putInt("soilDry", soilDryAdc);
+  prefs.putInt("soilWet", soilWetAdc);
+}
+
+void setAutoReadings(bool enabled, unsigned long intervalMs) {
+  autoReadingsEnabled = enabled;
+  autoReadingsIntervalMs = max(intervalMs, 60000UL);
+  ensurePrefs();
+  prefs.putBool("autoRpt", autoReadingsEnabled);
+  prefs.putUInt("autoInt", autoReadingsIntervalMs);
+}
+
+void setTimezoneOffsetHours(int offset) {
+  timezoneOffsetHours = constrain(offset, -12, 14);
+  ensurePrefs();
+  prefs.putInt("tzOff", timezoneOffsetHours);
 }
