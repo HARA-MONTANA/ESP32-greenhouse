@@ -14,12 +14,61 @@ const int R_Agua = PIN_RELE1;
 const int PUMP_ON_LEVEL = HIGH;
 const int PUMP_OFF_LEVEL = LOW;
 bool autoIrrigationEnabled = false;
+bool tankEmptyNotified = false;
+bool pumpNotCalibratedNotified = false;
+
+struct PulseSummary {
+  int finalAdc;
+  int finalPercent;
+  float deliveredMl;
+  unsigned long totalOnTimeMs;
+  unsigned long totalDurationMs;
+  unsigned int pulseCount;
+  unsigned long absorptionMs;
+};
+
+PulseSummary runPulsedIrrigation(float totalMl, float pumpFlow, int targetPercent, int highThreshold, int initialAdc) {
+  const float estimatedPumpTimeMs = (totalMl / pumpFlow) * 1000.0f;
+  const unsigned long basePulseOnMs = constrain(static_cast<unsigned long>(estimatedPumpTimeMs / 6.0f), 500UL, 3000UL);
+  const unsigned long absorptionMs = max(basePulseOnMs * 3UL, 5000UL);
+
+  PulseSummary summary{};
+  summary.finalAdc = initialAdc;
+  summary.finalPercent = soilPercentFromAdc(initialAdc);
+  summary.absorptionMs = absorptionMs;
+
+  const unsigned long startMs = millis();
+
+  while (summary.deliveredMl < totalMl && summary.finalPercent < targetPercent && summary.finalPercent < highThreshold) {
+    const float remainingMl = totalMl - summary.deliveredMl;
+    const unsigned long remainingOnMs = static_cast<unsigned long>((remainingMl / pumpFlow) * 1000.0f);
+    unsigned long pulseOnMs = min(basePulseOnMs, remainingOnMs);
+    pulseOnMs = max(pulseOnMs, 300UL);
+
+    digitalWrite(R_Agua, PUMP_ON_LEVEL);
+    delay(pulseOnMs);
+    digitalWrite(R_Agua, PUMP_OFF_LEVEL);
+
+    summary.pulseCount++;
+    summary.totalOnTimeMs += pulseOnMs;
+    summary.deliveredMl += pumpFlow * (pulseOnMs / 1000.0f);
+
+    delay(absorptionMs);
+
+    summary.finalAdc = readSoilMoisture();
+    summary.finalPercent = soilPercentFromAdc(summary.finalAdc);
+  }
+
+  summary.totalDurationMs = millis() - startMs;
+  return summary;
+}
 }
 
 void initIrrigationHardware() {
   pinMode(R_Agua, OUTPUT);
   digitalWrite(R_Agua, PUMP_OFF_LEVEL);
   pinMode(PIN_FLOAT, INPUT_PULLUP);
+  autoIrrigationEnabled = getAutoIrrigationStored();
 }
 
 void pumpOn() { digitalWrite(R_Agua, PUMP_ON_LEVEL); }
@@ -35,13 +84,26 @@ bool checkSoilAndIrrigate() {
   const int soilPercent = soilPercentFromAdc(soilReading);
 
   if (!isPumpCalibrated()) {
-    broadcastMessage("Riego omitido: bomba sin calibrar.");
+    if (!pumpNotCalibratedNotified) {
+      broadcastMessage("Riego omitido: bomba sin calibrar.");
+      pumpNotCalibratedNotified = true;
+    }
     return false;
   }
+  pumpNotCalibratedNotified = false;
 
   if (!autoIrrigationEnabled) {
     return false;
   }
+
+  if (!isTankWaterAvailable()) {
+    if (!tankEmptyNotified) {
+      broadcastMessage("Riego omitido: tanque sin agua.");
+      tankEmptyNotified = true;
+    }
+    return false;
+  }
+  tankEmptyNotified = false;
 
   const int highThreshold = getSoilHighThreshold();
   if (highThreshold > 0 && soilPercent >= highThreshold) {
@@ -126,6 +188,9 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
   }
 }
 
-void setAutoIrrigationEnabled(bool enabled) { autoIrrigationEnabled = enabled; }
+void setAutoIrrigationEnabled(bool enabled) {
+  autoIrrigationEnabled = enabled;
+  setAutoIrrigationStored(enabled);
+}
 
 bool isAutoIrrigationEnabled() { return autoIrrigationEnabled; }

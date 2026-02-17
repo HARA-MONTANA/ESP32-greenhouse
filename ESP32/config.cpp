@@ -24,6 +24,7 @@ int soilThreshold = 20;       // Porcentaje mínimo antes de regar
 int soilHighThreshold = 65;   // Porcentaje máximo permitido
 int irrigationIntervalDays = 2;
 unsigned long lastIrrigationEpoch = 0;
+bool autoIrrigationStored = false;
 plantStage currentStage = PLANTULA;
 
 void ensurePrefs() {
@@ -120,6 +121,8 @@ void configLoad() {
 
   lastIrrigationEpoch = irrigationPrefs.getULong("lastIr", lastIrrigationEpoch);
 
+  autoIrrigationStored = irrigationPrefs.getBool("autoIr", autoIrrigationStored);
+
   if (!irrigationPrefs.isKey("stage")) {
     irrigationPrefs.putInt("stage", static_cast<int>(currentStage));
   }
@@ -146,6 +149,7 @@ void configSave() {
   irrigationPrefs.putInt("soilHigh", soilHighThreshold);
   irrigationPrefs.putInt("intDays", irrigationIntervalDays);
   irrigationPrefs.putULong("lastIr", lastIrrigationEpoch);
+  irrigationPrefs.putBool("autoIr", autoIrrigationStored);
   irrigationPrefs.putInt("stage", static_cast<int>(currentStage));
 }
 
@@ -167,6 +171,7 @@ void configReset() {
   soilHighThreshold = 65;
   irrigationIntervalDays = 2;
   lastIrrigationEpoch = 0;
+  autoIrrigationStored = false;
   currentStage = PLANTULA;
   configSave();
 }
@@ -326,6 +331,14 @@ void setLastIrrigationEpoch(unsigned long epochSeconds) {
   lastIrrigationEpoch = epochSeconds;
   ensurePrefs();
   irrigationPrefs.putULong("lastIr", lastIrrigationEpoch);
+}
+
+bool getAutoIrrigationStored() { return autoIrrigationStored; }
+
+void setAutoIrrigationStored(bool enabled) {
+  autoIrrigationStored = enabled;
+  ensurePrefs();
+  irrigationPrefs.putBool("autoIr", autoIrrigationStored);
 }
 
 bool setLightHoursForStage(plantStage stage, int hours) {
