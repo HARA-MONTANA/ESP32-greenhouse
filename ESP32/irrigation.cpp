@@ -157,23 +157,23 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
 
   const int initialAdc = initialSoilReading >= 0 ? initialSoilReading : readSoilMoisture();
   const int initialPercent = soilPercentFromAdc(initialAdc);
-  const int targetPercent = getSoilThreshold();
-  const int highThreshold = getSoilHighThreshold();
 
-  const PulseSummary summary = runPulsedIrrigation(totalMl, pumpFlow, targetPercent, highThreshold, initialAdc);
+  const unsigned long pumpTimeMs = static_cast<unsigned long>((totalMl / pumpFlow) * 1000.0f);
 
-  const int finalReading = summary.finalAdc;
-  const int finalPercent = summary.finalPercent;
+  pumpOn();
+  delay(pumpTimeMs);
+  pumpOff();
+
+  delay(5000);
+
+  const int finalAdc = readSoilMoisture();
+  const int finalPercent = soilPercentFromAdc(finalAdc);
 
   String logMsg = "Riego completado | Etapa: " + stageToString(stage);
-  logMsg += " | Volumen solicitado: " + String(totalMl, 1) + " mL";
-  logMsg += " | Volumen entregado: " + String(summary.deliveredMl, 1) + " mL";
-  logMsg += " | Pulsos: " + String(summary.pulseCount);
-  logMsg += " | ON acumulado: " + String(summary.totalOnTimeMs / 1000.0f, 1) + " s";
-  logMsg += " | Tiempo total: " + String(summary.totalDurationMs / 1000.0f, 1) + " s";
-  logMsg += " | Absorción entre pulsos: " + String(summary.absorptionMs / 1000.0f, 1) + " s";
-  logMsg += " | Humedad: " + String(initialPercent) + "% → " + String(finalPercent) + "% (ADC " + String(initialAdc) +
-            " → " + String(finalReading) + ")";
+  logMsg += " | Volumen: " + String(totalMl, 1) + " mL";
+  logMsg += " | Bomba ON: " + String(pumpTimeMs / 1000.0f, 1) + " s";
+  logMsg += " | Humedad: " + String(initialPercent) + "% -> " + String(finalPercent) + "%";
+  logMsg += " (ADC " + String(initialAdc) + " -> " + String(finalAdc) + ")";
 
   broadcastMessage(logMsg);
 
