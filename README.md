@@ -7,7 +7,7 @@ Firmware para automatizar un invernadero con ESP32. Controla riego, iluminación
 | Pin | GPIO | Función |
 |-----|------|---------|
 | PIN_DHT | 25 | Sensor DHT22 (temperatura y humedad) |
-| PIN_LED_MOSFET | 26 | MOSFET para LEDs auxiliares |
+| PIN_LED_MORADO | 26 | MOSFET — LED morado auxiliar |
 | PIN_CRED_SKIP | 27 | Botón para saltar credenciales (activo LOW) |
 | PIN_MQ135 | 34 | Sensor MQ-135 calidad de aire (ADC) |
 | PIN_SUELO | 32 | Sensor de humedad de suelo (ADC) |

@@ -34,6 +34,7 @@ int mqAlertThreshold = 500;
 bool autoReadingsEnabled = false;
 unsigned long autoReadingsIntervalMs = 300000;
 int timezoneOffsetHours = -5;
+int ledIntensity = 100;
 
 void ensurePrefs() {
   if (!prefsStarted) {
@@ -102,6 +103,7 @@ void configInit() {
   autoReadingsIntervalMs = max(prefs.getUInt("autoInt", autoReadingsIntervalMs), 60000UL);
 
   timezoneOffsetHours = constrain(prefs.getInt("tzOff", timezoneOffsetHours), -12, 14);
+  ledIntensity = constrain(prefs.getInt("led_int", ledIntensity), 1, 100);
 }
 
 void configSave() {
@@ -135,6 +137,7 @@ void configSave() {
   prefs.putBool("autoRpt", autoReadingsEnabled);
   prefs.putUInt("autoInt", autoReadingsIntervalMs);
   prefs.putInt("tzOff", timezoneOffsetHours);
+  prefs.putInt("led_int", ledIntensity);
 }
 
 void configReset() {
@@ -163,6 +166,7 @@ void configReset() {
   autoReadingsEnabled = false;
   autoReadingsIntervalMs = 300000;
   timezoneOffsetHours = -5;
+  ledIntensity = 100;
   configSave();
 }
 
@@ -351,4 +355,16 @@ void setTimezoneOffsetHours(int offset) {
   timezoneOffsetHours = constrain(offset, -12, 14);
   ensurePrefs();
   prefs.putInt("tzOff", timezoneOffsetHours);
+}
+
+// --- LED morado ---
+
+int getLedIntensity() { return ledIntensity; }
+
+bool setLedIntensity(int pct) {
+  if (pct < 1 || pct > 100) return false;
+  ledIntensity = pct;
+  ensurePrefs();
+  prefs.putInt("led_int", ledIntensity);
+  return true;
 }

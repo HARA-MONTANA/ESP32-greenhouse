@@ -61,3 +61,7 @@ void setMqAlertThreshold(int val);
 void setSoilCalibration(int dryAdc, int wetAdc);
 void setAutoReadings(bool enabled, unsigned long intervalMs);
 void setTimezoneOffsetHours(int offset);
+
+// --- LED morado ---
+int  getLedIntensity();
+bool setLedIntensity(int pct);  // rango 1-100

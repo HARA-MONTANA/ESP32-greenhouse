@@ -58,6 +58,13 @@ bool fanAuto = true;
 int fanPercent = 0;
 int fanApplied = -1;
 
+// LED morado PWM
+const int LED_PWM_CHANNEL = 1;
+const int LED_PWM_FREQ    = 1000;
+const int LED_PWM_RES     = 8;
+const int LED_PWM_MAX     = 255;
+bool ledManual = false;  // true = encender independiente de etapa (respeta horario)
+
 // Luces
 const int LIGHTS_ON_HOUR = 6;
 const int LIGHTS_ON_MINUTE = 0;
@@ -68,6 +75,14 @@ bool alertTempHigh = false;
 bool alertRhLow = false;
 bool alertRhHigh = false;
 bool alertMq = false;
+
+// Contadores de lecturas consecutivas sin condición (para resetear flags)
+const int ALERT_CLEAR_COUNT = 5;
+int clearCountWater  = 0;
+int clearCountTemp   = 0;
+int clearCountRhLow  = 0;
+int clearCountRhHigh = 0;
+int clearCountMq     = 0;
 
 // Timers del loop
 unsigned long lastLightMs = 0;
@@ -252,9 +267,17 @@ void applyLightSchedule() {
   plantStage stage = getCurrentStage();
   time_t offTs = startTs + getLightHoursForStage(stage) * 3600L;
 
-  bool shouldBeOn = nowTs >= startTs && nowTs < offTs;
+  bool shouldBeOn    = nowTs >= startTs && nowTs < offTs;
+  bool ledShouldBeOn = shouldBeOn && (stageUsesLeds(stage) || ledManual);
+
   digitalWrite(PIN_RELE2, shouldBeOn ? LOW : HIGH);
-  digitalWrite(PIN_LED_MOSFET, (shouldBeOn && stageUsesLeds(stage)) ? HIGH : LOW);
+
+  if (ledShouldBeOn) {
+    int duty = map(getLedIntensity(), 0, 100, 0, LED_PWM_MAX);
+    ledcWrite(LED_PWM_CHANNEL, duty);
+  } else {
+    ledcWrite(LED_PWM_CHANNEL, 0);
+  }
 }
 
 // =========================================================
@@ -266,8 +289,14 @@ void evaluateAlerts() {
   if (!water && !alertWater) {
     broadcastMessage("ALERTA: tanque sin agua");
     alertWater = true;
-  } else if (water) {
-    alertWater = false;
+    clearCountWater = 0;
+  } else if (!water && alertWater) {
+    clearCountWater = 0;
+  } else if (alertWater) {
+    if (++clearCountWater >= ALERT_CLEAR_COUNT) {
+      alertWater = false;
+      clearCountWater = 0;
+    }
   }
 
   float tempC, rh;
@@ -279,8 +308,14 @@ void evaluateAlerts() {
     if (tempHigh && !alertTempHigh) {
       broadcastMessage("ALERTA: temp alta (" + String(tempC, 1) + "C >= " + String(getTempAlertThreshold()) + "C)");
       alertTempHigh = true;
-    } else if (!tempHigh) {
-      alertTempHigh = false;
+      clearCountTemp = 0;
+    } else if (tempHigh && alertTempHigh) {
+      clearCountTemp = 0;
+    } else if (alertTempHigh) {
+      if (++clearCountTemp >= ALERT_CLEAR_COUNT) {
+        alertTempHigh = false;
+        clearCountTemp = 0;
+      }
     }
 
     bool lowRhStage = (stage == PLANTULA || stage == VEGETATIVO);
@@ -288,8 +323,14 @@ void evaluateAlerts() {
     if (rhLow && !alertRhLow) {
       broadcastMessage("ALERTA: humedad baja (" + String(rh, 0) + "% < " + String(getRhLowAlertThreshold()) + "%)");
       alertRhLow = true;
-    } else if (!rhLow) {
-      alertRhLow = false;
+      clearCountRhLow = 0;
+    } else if (rhLow && alertRhLow) {
+      clearCountRhLow = 0;
+    } else if (alertRhLow) {
+      if (++clearCountRhLow >= ALERT_CLEAR_COUNT) {
+        alertRhLow = false;
+        clearCountRhLow = 0;
+      }
     }
 
     bool highRhStage = (stage == PRE_FLORACION || stage == FLORACION || stage == FINAL);
@@ -297,13 +338,22 @@ void evaluateAlerts() {
     if (rhHigh && !alertRhHigh) {
       broadcastMessage("ALERTA: humedad alta (" + String(rh, 0) + "% > " + String(getRhHighAlertThreshold()) + "%)");
       alertRhHigh = true;
-    } else if (!rhHigh) {
-      alertRhHigh = false;
+      clearCountRhHigh = 0;
+    } else if (rhHigh && alertRhHigh) {
+      clearCountRhHigh = 0;
+    } else if (alertRhHigh) {
+      if (++clearCountRhHigh >= ALERT_CLEAR_COUNT) {
+        alertRhHigh = false;
+        clearCountRhHigh = 0;
+      }
     }
   } else {
     alertTempHigh = false;
     alertRhLow = false;
     alertRhHigh = false;
+    clearCountTemp = 0;
+    clearCountRhLow = 0;
+    clearCountRhHigh = 0;
   }
 
   int mq = analogRead(PIN_MQ135);
@@ -311,8 +361,14 @@ void evaluateAlerts() {
   if (poorAir && !alertMq) {
     broadcastMessage("ALERTA: aire pobre (MQ=" + String(mq) + " >= " + String(getMqAlertThreshold()) + ")");
     alertMq = true;
-  } else if (!poorAir) {
-    alertMq = false;
+    clearCountMq = 0;
+  } else if (poorAir && alertMq) {
+    clearCountMq = 0;
+  } else if (alertMq) {
+    if (++clearCountMq >= ALERT_CLEAR_COUNT) {
+      alertMq = false;
+      clearCountMq = 0;
+    }
   }
 }
 
@@ -338,6 +394,10 @@ String formatStatus() {
   s += "Etapa: " + stageToString(getCurrentStage());
   s += " | Luz: " + String(areLightsOn() ? "ON" : "OFF") + " (OFF " + formatLightsOffTime() + ")";
   s += " | Agua: " + String(water ? "SI" : "NO") + "\n";
+  s += "LED morado: ";
+  s += (ledcRead(LED_PWM_CHANNEL) > 0) ? String(getLedIntensity()) + "%" : String("OFF");
+  s += ledManual ? " [MANUAL]" : " [AUTO]";
+  s += "\n";
   s += "Riego: " + formatLastIrrigation() + " | mL: " + String(stageMl, 0);
   s += " | Auto: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF");
   return s;
@@ -385,6 +445,7 @@ String commandHelp() {
   h += "maceta [litros]\n";
   h += "ml [etapa] [valor]\n";
   h += "luz [etapa] [horas]\n";
+  h += "led [on|off|0-100] - LED morado manual (respeta horario)\n";
   h += "pausariego [dias]\n";
   h += "suelomin [%] / suelomax [%]\n";
   h += "calsuelo [SECO] [HUMEDO]\n";
@@ -509,6 +570,30 @@ String handleCommand(const String &chatId, const String &raw) {
     }
     if (!setLightHoursForStage(stage, hours)) return "Rango: 12-20 h";
     return "Luz " + args.substring(0, sp2) + ": " + String(hours) + " h";
+  }
+
+  if (cmd == "led") {
+    if (args.isEmpty()) {
+      bool on = (ledcRead(LED_PWM_CHANNEL) > 0);
+      return String("LED morado: ") + (on ? "ON" : "OFF") +
+             " | Modo: " + (ledManual ? "MANUAL" : "AUTO") +
+             " | Brillo: " + String(getLedIntensity()) + "%";
+    }
+    int pct = args.toInt();
+    if (args == String(pct) && pct >= 0 && pct <= 100) {
+      if (pct == 0) {
+        ledManual = false;
+      } else {
+        setLedIntensity(pct);
+        ledManual = true;
+      }
+      applyLightSchedule();
+      return String("LED morado brillo: ") + String(pct) + "%" +
+             (pct == 0 ? " (auto)" : " (manual, sigue horario)");
+    }
+    ledManual = parseOnOff(args);
+    applyLightSchedule();
+    return String("LED morado: ") + (ledManual ? "ON manual (sigue horario)" : "auto por etapa");
   }
 
   if (cmd == "pausariego") {
@@ -1090,8 +1175,9 @@ void setup() {
 
   pinMode(PIN_RELE2, OUTPUT);
   digitalWrite(PIN_RELE2, HIGH);
-  pinMode(PIN_LED_MOSFET, OUTPUT);
-  digitalWrite(PIN_LED_MOSFET, LOW);
+  ledcSetup(LED_PWM_CHANNEL, LED_PWM_FREQ, LED_PWM_RES);
+  ledcAttachPin(PIN_LED_MORADO, LED_PWM_CHANNEL);
+  ledcWrite(LED_PWM_CHANNEL, 0);
   pinMode(PIN_CRED_SKIP, INPUT_PULLUP);
   delay(10);
 
