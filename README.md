@@ -23,7 +23,7 @@ Firmware para automatizar un invernadero con ESP32. Controla riego, iluminación
 
 1. Conectar el ESP32 por USB y abrir el monitor serie a 115200 baud.
 2. Ingresar SSID de WiFi, contraseña y token de Telegram cuando se soliciten.
-3. (Opcional) Mantener presionado el botón GPIO 27 para reutilizar credenciales guardadas.
+3. (Opcional) Presionar el botón GPIO 27 en cualquier momento durante el arranque para reutilizar credenciales guardadas.
 4. El firmware sincroniza la hora por NTP y verifica el token de Telegram.
 
 Las credenciales se guardan en la memoria NVS y se reutilizan en futuros arranques.

@@ -31,6 +31,7 @@ std::vector<String> authorizedChatIds;
 bool skipCredentialPrompt = false;
 bool credentialSkipNotified = false;
 bool missingStoredCredsWarned = false;
+volatile bool skipButtonFired = false;
 
 // Telegram
 WiFiClientSecure telegramClient;
@@ -789,7 +790,11 @@ bool ensureChatAuthorized(const String &chatId) {
 //  SISTEMA DE CREDENCIALES (botón skip + serial)
 // =========================================================
 
-bool isSkipButtonPressed() { return digitalRead(PIN_CRED_SKIP) == LOW; }
+void IRAM_ATTR onSkipButtonFalling() {
+  skipButtonFired = true;
+}
+
+bool isSkipButtonPressed() { return skipButtonFired; }
 
 void warnMissingStoredCredentials() {
   if (missingStoredCredsWarned) return;
@@ -1180,6 +1185,7 @@ void setup() {
   ledcWrite(LED_PWM_CHANNEL, 0);
   pinMode(PIN_CRED_SKIP, INPUT_PULLUP);
   delay(10);
+  attachInterrupt(digitalPinToInterrupt(PIN_CRED_SKIP), onSkipButtonFalling, FALLING);
 
   // Cargar credenciales almacenadas
   loadStoredCredentials();
