@@ -16,6 +16,7 @@
 #include "config.h"
 #include "irrigation.h"
 #include "dashboard.h"
+#include "sdcard.h"
 
 // =========================================================
 //  VARIABLES GLOBALES
@@ -95,6 +96,7 @@ unsigned long lastFanMs = 0;
 unsigned long lastSoilMs = 0;
 unsigned long lastTelegramMs = 0;
 unsigned long lastReportMs = 0;
+unsigned long lastSdLogMs = 0;
 
 // Web dashboard
 AsyncWebServer webServer(80);
@@ -248,6 +250,32 @@ void initWebServer() {
     }
   });
 
+  // Ruta: listar meses y archivos de log en SD
+  webServer.on("/api/logs", HTTP_GET, [](AsyncWebServerRequest *req) {
+    String json;
+    if (!sdBuildLogIndex(json)) {
+      req->send(503, "application/json", "{\"error\":\"SD no disponible\"}");
+      return;
+    }
+    req->send(200, "application/json", json);
+  });
+
+  // Ruta: servir o descargar un archivo CSV de log
+  // ?path=/logs/MM/YYYY-MM-DD.csv  [&dl=1 para descarga]
+  webServer.on("/api/logfile", HTTP_GET, [](AsyncWebServerRequest *req) {
+    if (!req->hasParam("path")) {
+      req->send(400, "application/json", "{\"error\":\"Falta parametro path\"}");
+      return;
+    }
+    String safe = sdValidateLogPath(req->getParam("path")->value());
+    if (safe.isEmpty()) {
+      req->send(404, "application/json", "{\"error\":\"Archivo no encontrado\"}");
+      return;
+    }
+    bool dl = req->hasParam("dl") && req->getParam("dl")->value() == "1";
+    req->send(SD, safe.c_str(), "text/csv", dl);
+  });
+
   webServer.addHandler(&wsEndpoint);
   webServer.begin();
   Serial.println("[WEB] Dashboard en http://" + WiFi.localIP().toString());
@@ -334,6 +362,14 @@ void applyLightSchedule() {
   bool shouldBeOn    = nowTs >= startTs && nowTs < offTs;
   bool ledShouldBeOn = shouldBeOn && (stageUsesLeds(stage) || ledManual);
 
+  static bool prevLightOn = false;
+  if (shouldBeOn != prevLightOn) {
+    prevLightOn = shouldBeOn;
+    logAccion(shouldBeOn ? "LUZ_ON" : "LUZ_OFF",
+              "Etapa: " + stageToString(stage) + "; " +
+              String(getLightHoursForStage(stage)) + "h programadas");
+  }
+
   digitalWrite(PIN_RELE2, shouldBeOn ? LOW : HIGH);
 
   if (ledShouldBeOn) {
@@ -352,6 +388,7 @@ void evaluateAlerts() {
   bool water = isTankWaterAvailable();
   if (!water && !alertWater) {
     broadcastMessage("ALERTA: tanque sin agua");
+    logAccion("ALERTA_ON", "tanque sin agua");
     alertWater = true;
     clearCountWater = 0;
   } else if (!water && alertWater) {
@@ -360,6 +397,7 @@ void evaluateAlerts() {
     if (++clearCountWater >= ALERT_CLEAR_COUNT) {
       alertWater = false;
       clearCountWater = 0;
+      logAccion("ALERTA_OFF", "tanque con agua");
     }
   }
 
@@ -371,6 +409,7 @@ void evaluateAlerts() {
     bool tempHigh = getTempAlertThreshold() > 0 && tempC >= getTempAlertThreshold();
     if (tempHigh && !alertTempHigh) {
       broadcastMessage("ALERTA: temp alta (" + String(tempC, 1) + "C >= " + String(getTempAlertThreshold()) + "C)");
+      logAccion("ALERTA_ON", "temp alta (" + String(tempC, 1) + "C >= " + String(getTempAlertThreshold()) + "C)");
       alertTempHigh = true;
       clearCountTemp = 0;
     } else if (tempHigh && alertTempHigh) {
@@ -379,6 +418,7 @@ void evaluateAlerts() {
       if (++clearCountTemp >= ALERT_CLEAR_COUNT) {
         alertTempHigh = false;
         clearCountTemp = 0;
+        logAccion("ALERTA_OFF", "temp alta resuelta");
       }
     }
 
@@ -386,6 +426,7 @@ void evaluateAlerts() {
     bool rhLow = lowRhStage && getRhLowAlertThreshold() > 0 && rh < getRhLowAlertThreshold();
     if (rhLow && !alertRhLow) {
       broadcastMessage("ALERTA: humedad baja (" + String(rh, 0) + "% < " + String(getRhLowAlertThreshold()) + "%)");
+      logAccion("ALERTA_ON", "humedad baja (" + String(rh, 0) + "% < " + String(getRhLowAlertThreshold()) + "%)");
       alertRhLow = true;
       clearCountRhLow = 0;
     } else if (rhLow && alertRhLow) {
@@ -394,6 +435,7 @@ void evaluateAlerts() {
       if (++clearCountRhLow >= ALERT_CLEAR_COUNT) {
         alertRhLow = false;
         clearCountRhLow = 0;
+        logAccion("ALERTA_OFF", "humedad baja resuelta");
       }
     }
 
@@ -401,6 +443,7 @@ void evaluateAlerts() {
     bool rhHigh = highRhStage && getRhHighAlertThreshold() > 0 && rh > getRhHighAlertThreshold();
     if (rhHigh && !alertRhHigh) {
       broadcastMessage("ALERTA: humedad alta (" + String(rh, 0) + "% > " + String(getRhHighAlertThreshold()) + "%)");
+      logAccion("ALERTA_ON", "humedad alta (" + String(rh, 0) + "% > " + String(getRhHighAlertThreshold()) + "%)");
       alertRhHigh = true;
       clearCountRhHigh = 0;
     } else if (rhHigh && alertRhHigh) {
@@ -409,6 +452,7 @@ void evaluateAlerts() {
       if (++clearCountRhHigh >= ALERT_CLEAR_COUNT) {
         alertRhHigh = false;
         clearCountRhHigh = 0;
+        logAccion("ALERTA_OFF", "humedad alta resuelta");
       }
     }
   } else {
@@ -424,6 +468,7 @@ void evaluateAlerts() {
   bool poorAir = getMqAlertThreshold() > 0 && mq >= getMqAlertThreshold();
   if (poorAir && !alertMq) {
     broadcastMessage("ALERTA: aire pobre (MQ=" + String(mq) + " >= " + String(getMqAlertThreshold()) + ")");
+    logAccion("ALERTA_ON", "aire pobre (MQ=" + String(mq) + " >= " + String(getMqAlertThreshold()) + ")");
     alertMq = true;
     clearCountMq = 0;
   } else if (poorAir && alertMq) {
@@ -432,6 +477,7 @@ void evaluateAlerts() {
     if (++clearCountMq >= ALERT_CLEAR_COUNT) {
       alertMq = false;
       clearCountMq = 0;
+      logAccion("ALERTA_OFF", "calidad de aire recuperada");
     }
   }
 }
@@ -562,7 +608,9 @@ String handleCommand(const String &chatId, const String &raw) {
 
   if (cmd == "autoriego") {
     if (args.isEmpty()) return String("Riego auto: ") + (isAutoIrrigationEnabled() ? "ON" : "OFF");
-    setAutoIrrigationEnabled(parseOnOff(args));
+    bool enable = parseOnOff(args);
+    setAutoIrrigationEnabled(enable);
+    logAccion("CMD", String("autoriego ") + (enable ? "on" : "off"));
     return String("Riego auto ") + (isAutoIrrigationEnabled() ? "activado" : "desactivado");
   }
 
@@ -571,6 +619,7 @@ String handleCommand(const String &chatId, const String &raw) {
     fanPercent = pct;
     fanAuto = false;
     updateFan(true);
+    logAccion("VENT", "manual " + String(pct) + "%");
     return "Fan manual: " + String(pct) + "%";
   }
 
@@ -578,6 +627,7 @@ String handleCommand(const String &chatId, const String &raw) {
     if (args.isEmpty()) return String("Fan auto: ") + (fanAuto ? "ON" : "OFF");
     fanAuto = parseOnOff(args);
     updateFan(true);
+    logAccion("VENT", fanAuto ? "auto activado" : "auto desactivado");
     return String("Fan auto ") + (fanAuto ? "ON" : "OFF");
   }
 
@@ -605,6 +655,7 @@ String handleCommand(const String &chatId, const String &raw) {
     if (args.isEmpty()) return "Uso: etapa [pl|veg|pre|flo|fin]";
     updateStage(stageFromString(args));
     configSave();
+    logAccion("CMD", "etapa " + stageToString(getCurrentStage()));
     return "Etapa: " + stageToString(getCurrentStage());
   }
 
@@ -776,6 +827,7 @@ String handleCommand(const String &chatId, const String &raw) {
   }
 
   if (cmd == "reset") {
+    logAccion("CMD", "reset de configuracion");
     configReset();
     return "Configuracion restablecida.";
   }
@@ -1282,10 +1334,17 @@ void setup() {
   connectWifi();
 
   // NTP (o fallback a RTC)
-  if (!syncNtp()) {
+  bool ntpOk = syncNtp();
+  if (!ntpOk) {
     Serial.println("NTP fallo, intentando RTC...");
     setTimeFromRtc();
   }
+
+  // SD card (después de NTP para que los timestamps sean correctos)
+  sdInit();
+  logAccion("INICIO", "Sistema iniciado; WiFi " +
+            String(WiFi.status() == WL_CONNECTED ? "OK" : "FALLO") +
+            "; NTP " + String(ntpOk ? "OK" : "FALLO"));
 
   // Luces y fan
   applyLightSchedule();
@@ -1332,5 +1391,15 @@ void loop() {
     checkSoilAndIrrigate();
     evaluateAlerts();
     broadcastSensorData();
+  }
+
+  // Log periódico de sensores a SD cada 5 minutos
+  if (now - lastSdLogMs >= 300000UL) {
+    lastSdLogMs = now;
+    float sdTemp, sdRh;
+    bool sdValid = readAmbient(sdTemp, sdRh);
+    int sdSoil   = soilPercentFromAdc(readSoilMoisture());
+    int sdMq     = analogRead(PIN_MQ135);
+    logSensors(sdTemp, sdRh, sdSoil, sdMq, sdValid);
   }
 }

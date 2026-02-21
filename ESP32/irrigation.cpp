@@ -5,9 +5,10 @@
 
 #include "pins.h"
 
-// Declarada en ESP32.ino
+// Declaradas en ESP32.ino / sdcard.cpp
 void broadcastMessage(const String &msg);
 String stageToString(plantStage stage);
+void logAccion(const char *tipo, const String &detalle);
 
 namespace {
 const int PUMP_ON_LEVEL = HIGH;
@@ -119,6 +120,13 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
   msg += " | Bomba: " + String(pumpTimeMs / 1000.0f, 1) + " s";
   msg += " | Suelo: " + String(initialPercent) + "% -> " + String(finalPercent) + "%";
   broadcastMessage(msg);
+
+  // Log a SD card
+  String det = "etapa " + stageToString(getCurrentStage())
+             + "; " + String(totalMl, 1) + " mL"
+             + "; bomba " + String(pumpTimeMs / 1000.0f, 1) + "s"
+             + "; suelo " + String(initialPercent) + "%->" + String(finalPercent) + "%";
+  logAccion("RIEGO", det);
 
   if (finalPercent <= initialPercent) {
     broadcastMessage("Riego sin incremento de humedad; verifica bomba y mangueras.");
