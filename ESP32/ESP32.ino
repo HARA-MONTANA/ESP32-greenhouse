@@ -8,10 +8,14 @@
 #include <Preferences.h>
 #include <vector>
 #include <DHT.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncTCP.h>
+#include <ArduinoJson.h>
 
 #include "pins.h"
 #include "config.h"
 #include "irrigation.h"
+#include "dashboard.h"
 
 // =========================================================
 //  VARIABLES GLOBALES
@@ -92,6 +96,10 @@ unsigned long lastSoilMs = 0;
 unsigned long lastTelegramMs = 0;
 unsigned long lastReportMs = 0;
 
+// Web dashboard
+AsyncWebServer webServer(80);
+AsyncWebSocket wsEndpoint("/ws");
+
 // Timezone string para POSIX
 String tzPosix;
 
@@ -99,6 +107,8 @@ String tzPosix;
 void configureTimezone();
 bool syncNtp(unsigned long maxWaitMs = 30000);
 bool setTimeFromRtc();
+void initWebServer();
+void broadcastSensorData();
 
 // =========================================================
 //  UTILIDADES
@@ -188,6 +198,59 @@ void broadcastMessage(const String &msg) {
   for (const auto &id : authorizedChatIds) {
     telegramBot->sendMessage(id, msg, "");
   }
+}
+
+// =========================================================
+//  WEB DASHBOARD — broadcast JSON por WebSocket
+// =========================================================
+
+void broadcastSensorData() {
+  if (wsEndpoint.count() == 0) return;
+
+  float tempC, rh;
+  bool valid   = readAmbient(tempC, rh);
+  int  soilAdc = readSoilMoisture();
+  int  soilPct = soilPercentFromAdc(soilAdc);
+  int  mqRaw   = analogRead(PIN_MQ135);
+  time_t ts;
+  time(&ts);
+
+  StaticJsonDocument<128> doc;
+  if (valid) {
+    doc["temp_c"] = round(tempC * 10.0) / 10.0;
+    doc["rh_pct"] = round(rh   * 10.0) / 10.0;
+  } else {
+    doc["temp_c"] = nullptr;
+    doc["rh_pct"] = nullptr;
+  }
+  doc["soil_pct"]   = soilPct;
+  doc["mq_raw"]     = mqRaw;
+  doc["temp_valid"] = valid;
+  doc["ts"]         = (long)ts;
+
+  String payload;
+  payload.reserve(100);
+  serializeJson(doc, payload);
+  wsEndpoint.textAll(payload);
+}
+
+void initWebServer() {
+  webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *req) {
+    req->send_P(200, "text/html", DASHBOARD_HTML);
+  });
+
+  wsEndpoint.onEvent([](AsyncWebSocket *server,
+                         AsyncWebSocketClient *client,
+                         AwsEventType type,
+                         void *arg, uint8_t *data, size_t len) {
+    if (type == WS_EVT_CONNECT) {
+      broadcastSensorData();  // enviar lectura inmediata al nuevo cliente
+    }
+  });
+
+  webServer.addHandler(&wsEndpoint);
+  webServer.begin();
+  Serial.println("[WEB] Dashboard en http://" + WiFi.localIP().toString());
 }
 
 // =========================================================
@@ -1233,6 +1296,11 @@ void setup() {
   telegramClient.setTimeout(15000);
   initializeTelegramBot();
 
+  // Web dashboard (requiere WiFi conectado)
+  if (WiFi.status() == WL_CONNECTED) {
+    initWebServer();
+  }
+
   Serial.println(formatConfig());
   Serial.println("Sistema listo.");
 }
@@ -1244,6 +1312,7 @@ void setup() {
 void loop() {
   handleSerialInput();
   pollTelegram();
+  wsEndpoint.cleanupClients();
   sendPeriodicReport();
 
   unsigned long now = millis();
@@ -1262,5 +1331,6 @@ void loop() {
     lastSoilMs = now;
     checkSoilAndIrrigate();
     evaluateAlerts();
+    broadcastSensorData();
   }
 }
