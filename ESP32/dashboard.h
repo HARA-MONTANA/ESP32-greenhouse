@@ -419,6 +419,122 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
       pointer-events: none;
       z-index: 999;
     }
+
+    /* ── LOGS PANEL ── */
+    #logs-panel {
+      margin: 1.2rem 1rem 2rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.2rem 1.4rem;
+      box-shadow: 0 0 24px #7a04eb22;
+    }
+    .logs-section-title {
+      font-size: 0.68rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--c4);
+      margin-bottom: 1rem;
+    }
+    .logs-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.9rem;
+    }
+    .logs-toolbar label {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+    }
+    #log-month-select {
+      background: #060115;
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.3rem 0.6rem;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+    #log-file-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-bottom: 0.9rem;
+      min-height: 1.8rem;
+    }
+    .log-file-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      border-radius: 6px;
+      padding: 0.25rem 0.65rem;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: border-color 0.18s, color 0.18s, box-shadow 0.18s;
+    }
+    .log-file-btn:hover, .log-file-btn.active {
+      border-color: var(--c2);
+      color: var(--c2);
+      box-shadow: 0 0 8px #ff00a044;
+    }
+    #log-status {
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      letter-spacing: 0.06em;
+      margin-bottom: 0.7rem;
+      min-height: 1rem;
+    }
+    #log-table-wrap {
+      overflow-x: auto;
+      overflow-y: auto;
+      max-height: 420px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    #log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.65rem;
+    }
+    #log-table th {
+      background: #0d0330;
+      color: var(--c4);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 0.4rem 0.7rem;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      white-space: nowrap;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    #log-table td {
+      padding: 0.28rem 0.7rem;
+      border-bottom: 1px solid #7a04eb18;
+      white-space: nowrap;
+    }
+    #log-table tr:last-child td { border-bottom: none; }
+    #log-table tr:hover td { background: #7a04eb14; }
+    /* colores por tipo */
+    .lt-SENSOR    { color: var(--c3); }
+    .lt-RIEGO     { color: #39ff14; }
+    .lt-ALERTA_ON { color: var(--col-high); }
+    .lt-ALERTA_OFF{ color: var(--col-mid); }
+    .lt-LUZ_ON    { color: #ffe600; }
+    .lt-LUZ_OFF   { color: #555577; }
+    .lt-VENT      { color: #00e5ff; }
+    .lt-CMD       { color: var(--c2); }
+    .lt-INICIO    { color: var(--text-dim); }
+    #logs-unavailable {
+      font-size: 0.72rem;
+      color: var(--col-high);
+      letter-spacing: 0.08em;
+    }
   </style>
 </head>
 <body>
@@ -577,6 +693,36 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
     </div>
   </div>
 
+</div>
+
+<!-- LOGS PANEL -->
+<div id="logs-panel">
+  <div class="logs-section-title">&#9654; Registros SD</div>
+  <div id="logs-unavailable" style="display:none;">SD no disponible.</div>
+  <div id="logs-ui" style="display:none;">
+    <div class="logs-toolbar">
+      <label for="log-month-select">MES:</label>
+      <select id="log-month-select"></select>
+    </div>
+    <div id="log-file-list"></div>
+    <div id="log-status">Selecciona un archivo para ver su contenido.</div>
+    <div id="log-table-wrap" style="display:none;">
+      <table id="log-table">
+        <thead>
+          <tr>
+            <th>Fecha/Hora</th>
+            <th>Tipo</th>
+            <th>Temp (&deg;C)</th>
+            <th>HR (%)</th>
+            <th>Suelo (%)</th>
+            <th>MQ</th>
+            <th>Detalle</th>
+          </tr>
+        </thead>
+        <tbody id="log-tbody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -936,6 +1082,121 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 
   document.getElementById('ip-label').textContent = location.hostname;
   connect();
+
+  // ── SD Log Viewer ──────────────────────────────────────────
+  var logIndex    = {};
+  var currentPath = null;
+
+  var elLogsUI    = document.getElementById('logs-ui');
+  var elLogsNA    = document.getElementById('logs-unavailable');
+  var elMonthSel  = document.getElementById('log-month-select');
+  var elFileList  = document.getElementById('log-file-list');
+  var elStatus    = document.getElementById('log-status');
+  var elTableWrap = document.getElementById('log-table-wrap');
+  var elTbody     = document.getElementById('log-tbody');
+
+  function logsInit() {
+    fetch('/api/logs')
+      .then(function(r) {
+        if (!r.ok) throw new Error('SD no disponible');
+        return r.json();
+      })
+      .then(function(data) {
+        logIndex = data.files || {};
+        var months = data.months || [];
+        if (months.length === 0) {
+          elStatus.textContent = 'Sin registros todavia.';
+          elLogsUI.style.display = 'block';
+          return;
+        }
+        months.forEach(function(m) {
+          var opt = document.createElement('option');
+          opt.value = m;
+          opt.textContent = m;
+          elMonthSel.appendChild(opt);
+        });
+        elLogsUI.style.display = 'block';
+        renderFileList(months[months.length - 1]);
+        elMonthSel.value = months[months.length - 1];
+      })
+      .catch(function() {
+        elLogsNA.style.display = 'block';
+      });
+  }
+
+  function renderFileList(month) {
+    elFileList.innerHTML = '';
+    elTableWrap.style.display = 'none';
+    elTbody.innerHTML = '';
+    elStatus.textContent = 'Selecciona un archivo para ver su contenido.';
+    var files = logIndex[month] || [];
+    if (files.length === 0) {
+      elStatus.textContent = 'Sin archivos para este mes.';
+      return;
+    }
+    files.forEach(function(fname) {
+      var btn = document.createElement('button');
+      btn.className = 'log-file-btn';
+      btn.textContent = fname;
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.log-file-btn').forEach(function(b) {
+          b.classList.remove('active');
+        });
+        btn.classList.add('active');
+        loadLogFile('/logs/' + month + '/' + fname);
+      });
+      elFileList.appendChild(btn);
+    });
+  }
+
+  function loadLogFile(path) {
+    currentPath = path;
+    elStatus.textContent = 'Cargando...';
+    elTableWrap.style.display = 'none';
+    elTbody.innerHTML = '';
+
+    fetch('/api/logfile?path=' + encodeURIComponent(path))
+      .then(function(r) {
+        if (!r.ok) throw new Error('No se pudo leer el archivo');
+        return r.text();
+      })
+      .then(function(csv) {
+        var lines = csv.split('\n').filter(function(l) { return l.trim().length > 0; });
+        var rows = lines.slice(1); // saltar cabecera
+        if (rows.length === 0) {
+          elStatus.textContent = 'Archivo sin registros.';
+          return;
+        }
+        rows.forEach(function(line) {
+          var c = line.split(',');
+          var tipo = (c[1] || '').trim();
+          var tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td>' + (c[0] || '') + '</td>' +
+            '<td class="lt-' + tipo + '">' + tipo + '</td>' +
+            '<td>' + (c[2] || '') + '</td>' +
+            '<td>' + (c[3] || '') + '</td>' +
+            '<td>' + (c[4] || '') + '</td>' +
+            '<td>' + (c[5] || '') + '</td>' +
+            '<td>' + (c.slice(6).join(',').replace(/^"|"$/g,'') || '') + '</td>';
+          elTbody.appendChild(tr);
+        });
+        var dlUrl = '/api/logfile?path=' + encodeURIComponent(path) + '&dl=1';
+        elStatus.innerHTML = rows.length + ' registros &nbsp;|&nbsp; ' +
+          '<a href="' + dlUrl + '" style="color:var(--c4);text-decoration:none;" download>' +
+          '&#8681; Descargar CSV</a>';
+        elTableWrap.style.display = 'block';
+      })
+      .catch(function(err) {
+        elStatus.textContent = 'Error: ' + err.message;
+      });
+  }
+
+  elMonthSel.addEventListener('change', function() {
+    renderFileList(elMonthSel.value);
+  });
+
+  logsInit();
 
 }());
 </script>

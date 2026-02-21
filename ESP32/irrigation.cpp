@@ -5,9 +5,13 @@
 
 #include "pins.h"
 
-// Declarada en ESP32.ino
+// Declaradas en ESP32.ino / sdcard.cpp
 void broadcastMessage(const String &msg);
 String stageToString(plantStage stage);
+void logAccion(const char *tipo, const String &detalle);
+bool readAmbient(float &tempC, float &rh);
+void logAccionConSensores(const char *tipo, const String &detalle,
+                           float tempC, float rh, int soilPct, int mqRaw);
 
 namespace {
 const int PUMP_ON_LEVEL = HIGH;
@@ -119,6 +123,16 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
   msg += " | Bomba: " + String(pumpTimeMs / 1000.0f, 1) + " s";
   msg += " | Suelo: " + String(initialPercent) + "% -> " + String(finalPercent) + "%";
   broadcastMessage(msg);
+
+  // Log a SD card con lecturas de ambiente del momento del riego
+  String det = "etapa " + stageToString(getCurrentStage())
+             + "; " + String(totalMl, 1) + " mL"
+             + "; bomba " + String(pumpTimeMs / 1000.0f, 1) + "s"
+             + "; suelo " + String(initialPercent) + "%->" + String(finalPercent) + "%";
+  float irrTemp = NAN, irrRh = NAN;
+  readAmbient(irrTemp, irrRh);
+  // soilPct: usar finalPercent (estado tras el riego); mqRaw: no relevante para riego
+  logAccionConSensores("RIEGO", det, irrTemp, irrRh, finalPercent, -1);
 
   if (finalPercent <= initialPercent) {
     broadcastMessage("Riego sin incremento de humedad; verifica bomba y mangueras.");
