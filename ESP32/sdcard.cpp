@@ -119,6 +119,13 @@ void logAccion(const char *tipo, const String &detalle) {
   writeLog(tipo, NAN, NAN, -1, -1, false, detalle);
 }
 
+void logAccionConSensores(const char *tipo, const String &detalle,
+                           float tempC, float rh,
+                           int soilPct, int mqRaw) {
+  if (!sdReady) return;
+  writeLog(tipo, tempC, rh, soilPct, mqRaw, true, detalle);
+}
+
 bool sdBuildLogIndex(String &outJson) {
   if (!sdReady) return false;
 

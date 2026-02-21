@@ -96,7 +96,7 @@ unsigned long lastFanMs = 0;
 unsigned long lastSoilMs = 0;
 unsigned long lastTelegramMs = 0;
 unsigned long lastReportMs = 0;
-unsigned long lastSdLogMs = 0;
+time_t nextSdLogEpoch = 0;   // epoch del próximo log alineado al reloj; 0 = no inicializado
 
 // Web dashboard
 AsyncWebServer webServer(80);
@@ -385,10 +385,19 @@ void applyLightSchedule() {
 // =========================================================
 
 void evaluateAlerts() {
+  // Leer todos los sensores una sola vez al inicio para que estén disponibles
+  // en todos los bloques de alerta (incluido el de agua, que va primero)
+  float tempC, rh;
+  bool ok = readAmbient(tempC, rh);
+  int soilPct = soilPercentFromAdc(readSoilMoisture());
+  int mqRaw   = analogRead(PIN_MQ135);
+  plantStage stage = getCurrentStage();
+
   bool water = isTankWaterAvailable();
   if (!water && !alertWater) {
     broadcastMessage("ALERTA: tanque sin agua");
-    logAccion("ALERTA_ON", "tanque sin agua");
+    logAccionConSensores("ALERTA_ON", "tanque sin agua",
+                         ok ? tempC : NAN, ok ? rh : NAN, soilPct, mqRaw);
     alertWater = true;
     clearCountWater = 0;
   } else if (!water && alertWater) {
@@ -401,15 +410,13 @@ void evaluateAlerts() {
     }
   }
 
-  float tempC, rh;
-  bool ok = readAmbient(tempC, rh);
-  plantStage stage = getCurrentStage();
-
   if (ok) {
     bool tempHigh = getTempAlertThreshold() > 0 && tempC >= getTempAlertThreshold();
     if (tempHigh && !alertTempHigh) {
       broadcastMessage("ALERTA: temp alta (" + String(tempC, 1) + "C >= " + String(getTempAlertThreshold()) + "C)");
-      logAccion("ALERTA_ON", "temp alta (" + String(tempC, 1) + "C >= " + String(getTempAlertThreshold()) + "C)");
+      logAccionConSensores("ALERTA_ON",
+                           "temp alta (" + String(tempC, 1) + "C >= " + String(getTempAlertThreshold()) + "C)",
+                           tempC, rh, soilPct, mqRaw);
       alertTempHigh = true;
       clearCountTemp = 0;
     } else if (tempHigh && alertTempHigh) {
@@ -426,7 +433,9 @@ void evaluateAlerts() {
     bool rhLow = lowRhStage && getRhLowAlertThreshold() > 0 && rh < getRhLowAlertThreshold();
     if (rhLow && !alertRhLow) {
       broadcastMessage("ALERTA: humedad baja (" + String(rh, 0) + "% < " + String(getRhLowAlertThreshold()) + "%)");
-      logAccion("ALERTA_ON", "humedad baja (" + String(rh, 0) + "% < " + String(getRhLowAlertThreshold()) + "%)");
+      logAccionConSensores("ALERTA_ON",
+                           "humedad baja (" + String(rh, 0) + "% < " + String(getRhLowAlertThreshold()) + "%)",
+                           tempC, rh, soilPct, mqRaw);
       alertRhLow = true;
       clearCountRhLow = 0;
     } else if (rhLow && alertRhLow) {
@@ -443,7 +452,9 @@ void evaluateAlerts() {
     bool rhHigh = highRhStage && getRhHighAlertThreshold() > 0 && rh > getRhHighAlertThreshold();
     if (rhHigh && !alertRhHigh) {
       broadcastMessage("ALERTA: humedad alta (" + String(rh, 0) + "% > " + String(getRhHighAlertThreshold()) + "%)");
-      logAccion("ALERTA_ON", "humedad alta (" + String(rh, 0) + "% > " + String(getRhHighAlertThreshold()) + "%)");
+      logAccionConSensores("ALERTA_ON",
+                           "humedad alta (" + String(rh, 0) + "% > " + String(getRhHighAlertThreshold()) + "%)",
+                           tempC, rh, soilPct, mqRaw);
       alertRhHigh = true;
       clearCountRhHigh = 0;
     } else if (rhHigh && alertRhHigh) {
@@ -464,11 +475,12 @@ void evaluateAlerts() {
     clearCountRhHigh = 0;
   }
 
-  int mq = analogRead(PIN_MQ135);
-  bool poorAir = getMqAlertThreshold() > 0 && mq >= getMqAlertThreshold();
+  bool poorAir = getMqAlertThreshold() > 0 && mqRaw >= getMqAlertThreshold();
   if (poorAir && !alertMq) {
-    broadcastMessage("ALERTA: aire pobre (MQ=" + String(mq) + " >= " + String(getMqAlertThreshold()) + ")");
-    logAccion("ALERTA_ON", "aire pobre (MQ=" + String(mq) + " >= " + String(getMqAlertThreshold()) + ")");
+    broadcastMessage("ALERTA: aire pobre (MQ=" + String(mqRaw) + " >= " + String(getMqAlertThreshold()) + ")");
+    logAccionConSensores("ALERTA_ON",
+                         "aire pobre (MQ=" + String(mqRaw) + " >= " + String(getMqAlertThreshold()) + ")",
+                         ok ? tempC : NAN, ok ? rh : NAN, soilPct, mqRaw);
     alertMq = true;
     clearCountMq = 0;
   } else if (poorAir && alertMq) {
@@ -1346,6 +1358,21 @@ void setup() {
             String(WiFi.status() == WL_CONNECTED ? "OK" : "FALLO") +
             "; NTP " + String(ntpOk ? "OK" : "FALLO"));
 
+  // Calcular el primer slot de log alineado al reloj (múltiplo de 5 min)
+  // Usa el RTC directamente como fuente de tiempo; cae back a NTP si no hay RTC
+  {
+    const time_t SD_INTERVAL = 300;  // 5 minutos en segundos
+    time_t ref = 0;
+    if (rtcReady) {
+      ref = rtc.now().unixtime();  // epoch directo del hardware RTC
+    } else {
+      time(&ref);                  // fallback: epoch del sistema (NTP)
+    }
+    if (ref > 0) {
+      nextSdLogEpoch = ((ref / SD_INTERVAL) + 1) * SD_INTERVAL;
+    }
+  }
+
   // Luces y fan
   applyLightSchedule();
   updateFan(true);
@@ -1393,13 +1420,17 @@ void loop() {
     broadcastSensorData();
   }
 
-  // Log periódico de sensores a SD cada 5 minutos
-  if (now - lastSdLogMs >= 300000UL) {
-    lastSdLogMs = now;
-    float sdTemp, sdRh;
-    bool sdValid = readAmbient(sdTemp, sdRh);
-    int sdSoil   = soilPercentFromAdc(readSoilMoisture());
-    int sdMq     = analogRead(PIN_MQ135);
-    logSensors(sdTemp, sdRh, sdSoil, sdMq, sdValid);
+  // Log periódico de sensores a SD alineado al reloj (cada :00, :05, :10, :15...)
+  if (nextSdLogEpoch > 0) {
+    time_t epoch_now = rtcReady ? (time_t)rtc.now().unixtime() : time(nullptr);
+    if (epoch_now >= nextSdLogEpoch) {
+      const time_t SD_INTERVAL = 300;
+      nextSdLogEpoch = ((epoch_now / SD_INTERVAL) + 1) * SD_INTERVAL;
+      float sdTemp, sdRh;
+      bool sdValid = readAmbient(sdTemp, sdRh);
+      int sdSoil   = soilPercentFromAdc(readSoilMoisture());
+      int sdMq     = analogRead(PIN_MQ135);
+      logSensors(sdTemp, sdRh, sdSoil, sdMq, sdValid);
+    }
   }
 }

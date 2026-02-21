@@ -14,6 +14,12 @@ void   logSensors(float tempC, float rh, int soilPct, int mqRaw, bool valid);
 //                                     "ALERTA_ON","ALERTA_OFF","CMD","INICIO")
 void   logAccion(const char *tipo, const String &detalle);
 
+// Igual que logAccion pero incluye los valores de sensores del momento en los
+// campos numéricos del CSV. Usar NAN / -1 para los campos no disponibles.
+void   logAccionConSensores(const char *tipo, const String &detalle,
+                             float tempC, float rh,
+                             int soilPct, int mqRaw);
+
 // Construye un JSON con el índice de meses y archivos disponibles en /logs
 // Retorna false si la SD no está disponible
 bool   sdBuildLogIndex(String &outJson);
