@@ -52,7 +52,7 @@ main{max-width:1200px;margin:0 auto;padding:var(--gap)}
 }
 .card-title{font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
 /* Sensor grid */
-#sensor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap);margin-bottom:var(--gap)}
+#sensor-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gap);margin-bottom:var(--gap)}
 @media(max-width:680px){#sensor-grid{grid-template-columns:repeat(2,1fr)}}
 .s-card{text-align:center;transition:border-color .3s}
 .s-card.card--alert{border-color:var(--c4)!important;animation:pulse-alert 1.4s infinite}
@@ -232,6 +232,30 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
       <div class="gauge-label">&#127787; Aire MQ</div>
     </div>
 
+    <div class="card s-card" id="card-soil-raw">
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 120 72" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#1a0840" stroke-width="9" stroke-linecap="round"/>
+          <path id="arc-soil-raw" d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#ff8c00" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset .6s,stroke .4s"/>
+          <text x="60" y="62" text-anchor="middle" fill="#e8d5ff" font-size="19" font-weight="bold" id="txt-soil-raw" font-family="Courier New">--</text>
+          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">ADC</text>
+        </svg>
+      </div>
+      <div class="gauge-label">&#127807; Suelo RAW</div>
+    </div>
+
+    <div class="card s-card" id="card-fan-rpm">
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 120 72" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#1a0840" stroke-width="9" stroke-linecap="round"/>
+          <path id="arc-fan-rpm" d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#00e5ff" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset .6s,stroke .4s"/>
+          <text x="60" y="62" text-anchor="middle" fill="#e8d5ff" font-size="19" font-weight="bold" id="txt-fan-rpm" font-family="Courier New">--</text>
+          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">RPM</text>
+        </svg>
+      </div>
+      <div class="gauge-label">&#127744; Fan RPM</div>
+    </div>
+
   </div><!-- /sensor-grid -->
 
   <!-- Mid row -->
@@ -295,6 +319,11 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
       </div>
       <div class="ctrl-row">
         <button class="btn btn-o" id="fan-auto-btn" onclick="toggleFanAuto(this)">Auto: ON</button>
+        <span style="font-size:.72rem;color:var(--cyan);margin-left:6px" id="fan-rpm-lbl">-- RPM</span>
+      </div>
+      <div style="margin-top:8px">
+        <svg id="rpm-chart" viewBox="0 0 200 36" preserveAspectRatio="none"
+          style="width:100%;height:36px;background:rgba(0,229,255,.05);border-radius:4px;display:block"></svg>
       </div>
     </div>
 
@@ -434,6 +463,9 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         <button class="btn btn-o" onclick="sc({cmd:'luz',args:'veg '+document.getElementById('cfg-luz-veg').value},this)">Guardar</button>
       </div>
       <p style="font-size:.72rem;color:var(--text2)">Pre-floracion / Floracion / Final: 12h &mdash; fijo por etapa</p>
+      <div class="cact" style="margin-top:14px">
+        <button class="btn btn-p" onclick="savePlanta(this)">&#128190; Guardar planta</button>
+      </div>
     </div>
   </details>
 
@@ -468,16 +500,20 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
     <summary style="border-left-color:#00e5ff">&#128167; Suelo y Bomba</summary>
     <div class="cbody">
       <div id="pump-cal-ind" style="font-size:.8rem;margin-bottom:9px">&#11036; Estado bomba: ---</div>
+      <p class="cnote">Umbral activacion: regar si suelo &lt; seco. Umbral omitir: no regar si suelo &ge; humedo.</p>
       <div class="cfield">
         <label>Umbral seco (%)</label>
         <input type="number" id="cfg-smin" min="0" max="50" value="25">
-        <button class="btn btn-o" onclick="sc({cmd:'suelomin',args:document.getElementById('cfg-smin').value},this)">Guardar</button>
       </div>
       <div class="cfield">
         <label>Umbral humedo (%)</label>
-        <input type="number" id="cfg-smax" min="51" max="100" value="70">
-        <button class="btn btn-o" onclick="sc({cmd:'suelomax',args:document.getElementById('cfg-smax').value},this)">Guardar</button>
+        <input type="number" id="cfg-smax" min="10" max="100" value="40">
       </div>
+      <div class="cact">
+        <button class="btn btn-p" onclick="saveUmbralesSuelo(this)">&#128190; Guardar umbrales</button>
+      </div>
+      <hr style="border-color:var(--border);margin:12px 0">
+      <p class="cnote">Calibracion ADC: mide el valor raw del sensor en seco y en humedo (ver gauge Suelo RAW en dashboard).</p>
       <div class="cfield">
         <label>ADC seco (0-4095)</label>
         <input type="number" id="cfg-adry" min="0" max="4095" value="2150">
@@ -487,7 +523,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         <input type="number" id="cfg-awet" min="0" max="4095" value="500">
       </div>
       <div class="cact">
-        <button class="btn btn-p" onclick="saveSuelo()">&#128190; Guardar calibracion suelo</button>
+        <button class="btn btn-p" onclick="saveSuelo(this)">&#128190; Guardar calibracion ADC</button>
       </div>
     </div>
   </details>
@@ -552,6 +588,8 @@ var ws, tsBase=0, tsAt=0, fanAuto=true, autoIrr=true;
 var logIdx={};
 var VD={tWarn:32,rhL:40,rhH:70,slL:25,mqW:500};
 var V=Object.assign({},VD,JSON.parse(localStorage.getItem('gh_vis')||'{}'));
+// Fan RPM history
+var rpmHist=[], RPM_MAX_PTS=40;
 
 // ── WebSocket
 function wsConn(){
@@ -577,6 +615,11 @@ function onWs(d){
   gauge('rh',d.rh_pct,0,100,V.rhL,V.rhH);
   gauge('soil',d.soil_pct,0,100,V.slL,80);
   gauge('mq',d.mq_raw,0,4095,V.mqW*0.7,V.mqW);
+  // Soil raw ADC (menor = mas humedo; sin alerta de color, rango 0-4095)
+  gauge('soil-raw',d.soil_adc,0,4095,9999,9999);
+  // Fan RPM
+  if(d.fan_rpm!==undefined){pushRpm(d.fan_rpm)}
+  gauge('fan-rpm',d.fan_rpm,0,3000,1500,2500);
   alrt('card-temp',d.alert_temp);
   alrt('card-rh',d.alert_rh);
   alrt('card-mq',d.alert_mq);
@@ -799,8 +842,9 @@ function saveAlertas(){
   sc({cmd:'hummax', args:document.getElementById('cfg-hmax').value});
   sc({cmd:'airemax',args:document.getElementById('cfg-mq').value});
 }
-function saveSuelo(){
+function saveSuelo(btn){
   sc({cmd:'calsuelo',args:document.getElementById('cfg-adry').value+' '+document.getElementById('cfg-awet').value});
+  if(btn)flash(btn,true);
 }
 function saveTelegram(){
   var tok=document.getElementById('tg-tok').value.trim();
@@ -851,6 +895,48 @@ function applyVis(){
   sv('vrh',V.rhH);document.getElementById('vrh-v').textContent=V.rhH;
   sv('vsl',V.slL);document.getElementById('vsl-v').textContent=V.slL;
   sv('vm',V.mqW);document.getElementById('vm-v').textContent=V.mqW;
+}
+
+// ── Fan RPM sparkline
+function pushRpm(v){
+  rpmHist.push(v);
+  if(rpmHist.length>RPM_MAX_PTS)rpmHist.shift();
+  var lbl=document.getElementById('fan-rpm-lbl');
+  if(lbl)lbl.textContent=v+' RPM';
+  drawRpmChart();
+}
+function drawRpmChart(){
+  var svg=document.getElementById('rpm-chart');
+  if(!svg||rpmHist.length<2)return;
+  var W=200,H=36;
+  var mx=Math.max.apply(null,rpmHist);
+  if(mx<100)mx=100;
+  var pts=rpmHist.map(function(r,i){
+    var x=((i/(RPM_MAX_PTS-1))*W).toFixed(1);
+    var y=(H-(r/mx)*(H-4)-2).toFixed(1);
+    return x+','+y;
+  }).join(' ');
+  svg.innerHTML='<polyline points="'+pts+'" fill="none" stroke="#00e5ff" stroke-width="1.5" stroke-linejoin="round"/>';
+}
+
+// ── Config save helpers
+function savePlanta(btn){
+  sc({cmd:'maceta',args:document.getElementById('cfg-pot').value});
+  sc({cmd:'pausariego',args:document.getElementById('cfg-pause').value});
+  sc({cmd:'led',args:document.getElementById('cfg-led').value});
+  sc({cmd:'ml',args:'pl '+document.getElementById('ml-pl').value});
+  sc({cmd:'ml',args:'veg '+document.getElementById('ml-veg').value});
+  sc({cmd:'ml',args:'pre '+document.getElementById('ml-pre').value});
+  sc({cmd:'ml',args:'flo '+document.getElementById('ml-flo').value});
+  sc({cmd:'ml',args:'fin '+document.getElementById('ml-fin').value});
+  sc({cmd:'luz',args:'pl '+document.getElementById('cfg-luz-pl').value});
+  sc({cmd:'luz',args:'veg '+document.getElementById('cfg-luz-veg').value});
+  if(btn)flash(btn,true);
+}
+function saveUmbralesSuelo(btn){
+  sc({cmd:'suelomin',args:document.getElementById('cfg-smin').value});
+  sc({cmd:'suelomax',args:document.getElementById('cfg-smax').value});
+  if(btn)flash(btn,true);
 }
 
 // ── Init

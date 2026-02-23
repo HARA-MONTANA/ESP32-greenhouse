@@ -17,8 +17,8 @@ int lightHoursVeg = 18;
 float potVolumeL = 15.0f;
 float pumpFlow = 0.0f;
 bool pumpCalibrated = false;
-int soilThreshold = 20;
-int soilHighThreshold = 65;
+int soilThreshold = 25;
+int soilHighThreshold = 40;
 int irrigationIntervalDays = 2;
 unsigned long lastIrrigationEpoch = 0;
 bool autoIrrigationStored = false;
@@ -28,8 +28,8 @@ plantStage currentStage = PLANTULA;
 int soilDryAdc = 2150;
 int soilWetAdc = 500;
 int tempAlertThreshold = 30;
-int rhLowAlertThreshold = 50;
-int rhHighAlertThreshold = 50;
+int rhLowAlertThreshold = 40;
+int rhHighAlertThreshold = 75;
 int mqAlertThreshold = 500;
 bool autoReadingsEnabled = false;
 unsigned long autoReadingsIntervalMs = 300000;
@@ -81,7 +81,7 @@ void configInit() {
   }
 
   soilThreshold = constrain(prefs.getInt("soilTh", soilThreshold), 0, 50);
-  soilHighThreshold = constrain(prefs.getInt("soilHigh", soilHighThreshold), 50, 100);
+  soilHighThreshold = constrain(prefs.getInt("soilHigh", soilHighThreshold), 10, 100);
   irrigationIntervalDays = constrain(prefs.getInt("intDays", irrigationIntervalDays), 1, 5);
   lastIrrigationEpoch = prefs.getULong("lastIr", lastIrrigationEpoch);
   autoIrrigationStored = prefs.getBool("autoIr", autoIrrigationStored);
@@ -151,8 +151,8 @@ void configReset() {
   potVolumeL = 15.0f;
   pumpFlow = 0.0f;
   pumpCalibrated = false;
-  soilThreshold = 20;
-  soilHighThreshold = 65;
+  soilThreshold = 25;
+  soilHighThreshold = 40;
   irrigationIntervalDays = 2;
   lastIrrigationEpoch = 0;
   autoIrrigationStored = false;
@@ -160,8 +160,8 @@ void configReset() {
   soilDryAdc = 2150;
   soilWetAdc = 500;
   tempAlertThreshold = 30;
-  rhLowAlertThreshold = 50;
-  rhHighAlertThreshold = 50;
+  rhLowAlertThreshold = 40;
+  rhHighAlertThreshold = 75;
   mqAlertThreshold = 500;
   autoReadingsEnabled = false;
   autoReadingsIntervalMs = 300000;
@@ -268,7 +268,7 @@ bool setSoilThreshold(int threshold) {
 }
 
 bool setSoilHighThreshold(int threshold) {
-  if (threshold < 50 || threshold > 100) return false;
+  if (threshold < 10 || threshold > 100) return false;
   soilHighThreshold = threshold;
   ensurePrefs();
   prefs.putInt("soilHigh", soilHighThreshold);
