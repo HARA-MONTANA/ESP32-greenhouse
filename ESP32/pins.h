@@ -19,6 +19,6 @@
 
 // --- Actuadores ---
 #define PIN_FAN_PWM   16   // MOSFET (fans)
-#define PIN_RELE1     17   // MOSFET bomba DC
-#define PIN_RELE2     13   // Luz AC (relé)
+#define PIN_PUMP      17   // MOSFET bomba DC  (ex RELE1)
+#define PIN_ACLIGHT   13   // Luz AC (relé)    (ex RELE2)
 #define PIN_FLOAT     33   // Float switch

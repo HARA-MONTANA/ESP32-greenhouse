@@ -65,6 +65,9 @@ bool fanAuto = true;
 int fanPercent = 0;
 int fanApplied = -1;
 
+// RPM estimado a partir del duty cycle (100 % ≈ 3000 RPM)
+unsigned long fanRpm = 0;
+
 // LED morado PWM
 const int LED_PWM_CHANNEL = 1;
 const int LED_PWM_FREQ    = 1000;
@@ -229,7 +232,7 @@ void broadcastSensorData() {
   time_t ts;
   time(&ts);
 
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<768> doc;
   if (valid) {
     doc["temp_c"] = round(tempC * 10.0) / 10.0;
     doc["rh_pct"] = round(rh   * 10.0) / 10.0;
@@ -238,7 +241,9 @@ void broadcastSensorData() {
     doc["rh_pct"] = nullptr;
   }
   doc["soil_pct"]    = soilPct;
+  doc["soil_adc"]    = soilAdc;
   doc["mq_raw"]      = mqRaw;
+  doc["fan_rpm"]     = (long)fanRpm;
   doc["temp_valid"]  = valid;
   doc["ts"]          = (long)ts;
   // System state
@@ -429,13 +434,14 @@ void updateFan(bool force = false) {
     fanApplied = target;
     fanPercent = target;
   }
+  fanRpm = (unsigned long)fanApplied * 30;  // estimado: 100% ≈ 3000 RPM
 }
 
 // =========================================================
 //  LUCES
 // =========================================================
 
-bool areLightsOn() { return digitalRead(PIN_RELE2) == LOW; }
+bool areLightsOn() { return digitalRead(PIN_ACLIGHT) == LOW; }
 
 String formatLightsOffTime() {
   int offMin = (LIGHTS_ON_HOUR * 60 + LIGHTS_ON_MINUTE + getLightHoursForStage(getCurrentStage()) * 60) % 1440;
@@ -473,7 +479,7 @@ void applyLightSchedule() {
               String(getLightHoursForStage(stage)) + "h programadas");
   }
 
-  digitalWrite(PIN_RELE2, shouldBeOn ? LOW : HIGH);
+  digitalWrite(PIN_ACLIGHT, shouldBeOn ? LOW : HIGH);
 
   if (ledShouldBeOn) {
     int duty = map(getLedIntensity(), 0, 100, 0, LED_PWM_MAX);
@@ -1409,8 +1415,8 @@ void setup() {
   initIrrigationHardware();
   initFan();
 
-  pinMode(PIN_RELE2, OUTPUT);
-  digitalWrite(PIN_RELE2, HIGH);
+  pinMode(PIN_ACLIGHT, OUTPUT);
+  digitalWrite(PIN_ACLIGHT, HIGH);
   ledcSetup(LED_PWM_CHANNEL, LED_PWM_FREQ, LED_PWM_RES);
   ledcAttachPin(PIN_LED_MORADO, LED_PWM_CHANNEL);
   ledcWrite(LED_PWM_CHANNEL, 0);

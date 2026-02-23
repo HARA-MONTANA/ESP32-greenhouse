@@ -22,14 +22,14 @@ bool pumpNotCalibratedNotified = false;
 }  // namespace
 
 void initIrrigationHardware() {
-  pinMode(PIN_RELE1, OUTPUT);
-  digitalWrite(PIN_RELE1, PUMP_OFF_LEVEL);
+  pinMode(PIN_PUMP, OUTPUT);
+  digitalWrite(PIN_PUMP, PUMP_OFF_LEVEL);
   pinMode(PIN_FLOAT, INPUT_PULLUP);
   autoIrrigationEnabled = getAutoIrrigationStored();
 }
 
-void pumpOn() { digitalWrite(PIN_RELE1, PUMP_ON_LEVEL); }
-void pumpOff() { digitalWrite(PIN_RELE1, PUMP_OFF_LEVEL); }
+void pumpOn() { digitalWrite(PIN_PUMP, PUMP_ON_LEVEL); }
+void pumpOff() { digitalWrite(PIN_PUMP, PUMP_OFF_LEVEL); }
 
 int readSoilMoisture() { return analogRead(PIN_SUELO); }
 
