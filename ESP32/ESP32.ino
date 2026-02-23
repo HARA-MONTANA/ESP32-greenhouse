@@ -43,6 +43,7 @@ WiFiClientSecure telegramClient;
 UniversalTelegramBot *telegramBot = nullptr;
 bool telegramEnabled = false;
 String lastTelegramChatId;
+String botName;
 
 // RTC
 RTC_DS3231 rtc;
@@ -124,6 +125,17 @@ String stageToString(plantStage stage) {
     case FLORACION:     return "Floracion";
     case FINAL:         return "Final";
     default:            return "N/D";
+  }
+}
+
+String stageToCode(plantStage stage) {
+  switch (stage) {
+    case PLANTULA:      return "pl";
+    case VEGETATIVO:    return "veg";
+    case PRE_FLORACION: return "pre";
+    case FLORACION:     return "flo";
+    case FINAL:         return "fin";
+    default:            return "pl";
   }
 }
 
@@ -217,7 +229,7 @@ void broadcastSensorData() {
   time_t ts;
   time(&ts);
 
-  StaticJsonDocument<128> doc;
+  StaticJsonDocument<512> doc;
   if (valid) {
     doc["temp_c"] = round(tempC * 10.0) / 10.0;
     doc["rh_pct"] = round(rh   * 10.0) / 10.0;
@@ -225,13 +237,31 @@ void broadcastSensorData() {
     doc["temp_c"] = nullptr;
     doc["rh_pct"] = nullptr;
   }
-  doc["soil_pct"]   = soilPct;
-  doc["mq_raw"]     = mqRaw;
-  doc["temp_valid"] = valid;
-  doc["ts"]         = (long)ts;
+  doc["soil_pct"]    = soilPct;
+  doc["mq_raw"]      = mqRaw;
+  doc["temp_valid"]  = valid;
+  doc["ts"]          = (long)ts;
+  // System state
+  doc["stage"]       = stageToCode(getCurrentStage());
+  doc["fan_pct"]     = fanApplied;
+  doc["fan_auto"]    = fanAuto;
+  doc["light_on"]    = areLightsOn();
+  doc["led_pct"]     = getLedIntensity();
+  doc["led_manual"]  = ledManual;
+  doc["auto_irr"]    = isAutoIrrigationEnabled();
+  doc["tank_ok"]     = isTankWaterAvailable();
+  // Alerts
+  doc["alert_temp"]  = alertTempHigh;
+  doc["alert_rh"]    = alertRhLow || alertRhHigh;
+  doc["alert_mq"]    = alertMq;
+  doc["alert_water"] = alertWater;
+  // Metadata
+  doc["last_irr"]    = (long)getLastIrrigationEpoch();
+  doc["tz_offset"]   = getTimezoneOffsetHours();
+  doc["bot_name"]    = botName;
 
   String payload;
-  payload.reserve(100);
+  payload.reserve(384);
   serializeJson(doc, payload);
   wsEndpoint.textAll(payload);
 }
@@ -247,6 +277,19 @@ void initWebServer() {
                          void *arg, uint8_t *data, size_t len) {
     if (type == WS_EVT_CONNECT) {
       broadcastSensorData();  // enviar lectura inmediata al nuevo cliente
+    } else if (type == WS_EVT_DATA) {
+      String msg;
+      msg.reserve(len);
+      for (size_t i = 0; i < len; i++) msg += (char)data[i];
+      StaticJsonDocument<128> cmd;
+      if (deserializeJson(cmd, msg) == DeserializationError::Ok) {
+        String c = cmd["cmd"] | "";
+        String a = cmd["args"] | "";
+        if (!c.isEmpty()) {
+          handleCommand("ws", a.length() ? c + " " + a : c);
+          broadcastSensorData();
+        }
+      }
     }
   });
 
@@ -259,6 +302,66 @@ void initWebServer() {
     }
     req->send(200, "application/json", json);
   });
+
+  // Ruta: configuración actual como JSON
+  webServer.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *req) {
+    StaticJsonDocument<384> doc;
+    doc["stage"]          = stageToCode(getCurrentStage());
+    doc["pot_l"]          = getPotVolumeL();
+    doc["ml_pl"]          = getMlPerLiterForStage(PLANTULA);
+    doc["ml_veg"]         = getMlPerLiterForStage(VEGETATIVO);
+    doc["ml_pre"]         = getMlPerLiterForStage(PRE_FLORACION);
+    doc["ml_flo"]         = getMlPerLiterForStage(FLORACION);
+    doc["ml_fin"]         = getMlPerLiterForStage(FINAL);
+    doc["luz_pl"]         = getLightHoursForStage(PLANTULA);
+    doc["luz_veg"]        = getLightHoursForStage(VEGETATIVO);
+    doc["pause_days"]     = getIrrigationIntervalDays();
+    doc["led_pct"]        = getLedIntensity();
+    doc["soil_min_pct"]   = getSoilThreshold();
+    doc["soil_max_pct"]   = getSoilHighThreshold();
+    doc["soil_dry_adc"]   = getSoilDryAdc();
+    doc["soil_wet_adc"]   = getSoilWetAdc();
+    doc["temp_max"]       = getTempAlertThreshold();
+    doc["hum_min"]        = getRhLowAlertThreshold();
+    doc["hum_max"]        = getRhHighAlertThreshold();
+    doc["mq_max"]         = getMqAlertThreshold();
+    doc["tz_offset"]      = getTimezoneOffsetHours();
+    doc["pump_calibrated"]= isPumpCalibrated();
+    doc["bot_name"]       = botName;
+    String json;
+    serializeJson(doc, json);
+    req->send(200, "application/json", json);
+  });
+
+  // Ruta: actualizar token y nombre del bot de Telegram
+  webServer.on("/api/telegram", HTTP_POST,
+    [](AsyncWebServerRequest *req) {},
+    nullptr,
+    [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
+      StaticJsonDocument<384> doc;
+      if (deserializeJson(doc, data, len) == DeserializationError::Ok) {
+        String tok  = doc["token"] | "";
+        String name = doc["name"]  | "";
+        if (tok.length() > 0) {
+          credStore.putString("token", tok);
+          telegramToken = tok;
+          storedTelegramToken = tok;
+          if (telegramBot) {
+            delete telegramBot;
+            telegramBot = new UniversalTelegramBot(telegramToken, telegramClient);
+          }
+          telegramEnabled = (telegramBot != nullptr);
+        }
+        if (name.length() > 0) {
+          credStore.putString("botname", name);
+          botName = name;
+        }
+        req->send(200, "application/json", "{\"ok\":true}");
+      } else {
+        req->send(400, "application/json", "{\"error\":\"invalid json\"}");
+      }
+    }
+  );
 
   // Ruta: servir o descargar un archivo CSV de log
   // ?path=/logs/MM/YYYY-MM-DD.csv  [&dl=1 para descarga]
@@ -856,6 +959,7 @@ void loadStoredCredentials() {
   storedWifiSsid = credStore.getString("ssid", "");
   storedWifiPassword = credStore.getString("pass", "");
   storedTelegramToken = credStore.getString("token", "");
+  botName = credStore.getString("botname", "");
 
   authorizedChatIds.clear();
   String stored = credStore.getString("ids", "");
