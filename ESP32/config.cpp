@@ -17,7 +17,7 @@ int lightHoursVeg = 18;
 float potVolumeL = 15.0f;
 float pumpFlow = 0.0f;
 bool pumpCalibrated = false;
-int soilThreshold = 25;
+int soilThreshold = 20;
 int soilHighThreshold = 40;
 int irrigationIntervalDays = 2;
 unsigned long lastIrrigationEpoch = 0;
@@ -151,7 +151,7 @@ void configReset() {
   potVolumeL = 15.0f;
   pumpFlow = 0.0f;
   pumpCalibrated = false;
-  soilThreshold = 25;
+  soilThreshold = 20;
   soilHighThreshold = 40;
   irrigationIntervalDays = 2;
   lastIrrigationEpoch = 0;

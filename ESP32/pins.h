@@ -19,7 +19,6 @@
 
 // --- Actuadores ---
 #define PIN_FAN_PWM   16   // MOSFET (fans)
-#define PIN_FAN_TACH  35   // Tacometro del ventilador (requiere pull-up externo 10k a 3.3V)
 #define PIN_PUMP      17   // MOSFET bomba DC  (ex RELE1)
 #define PIN_ACLIGHT   13   // Luz AC (relé)    (ex RELE2)
 #define PIN_FLOAT     33   // Float switch

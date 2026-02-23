@@ -65,11 +65,8 @@ bool fanAuto = true;
 int fanPercent = 0;
 int fanApplied = -1;
 
-// Fan tachometro (2 pulsos por revolucion; requiere pull-up externo 10k en PIN_FAN_TACH)
-volatile unsigned long fanTachCount = 0;
+// RPM estimado a partir del duty cycle (100 % ≈ 3000 RPM)
 unsigned long fanRpm = 0;
-unsigned long lastFanTachMs = 0;
-void IRAM_ATTR onFanTach() { fanTachCount++; }
 
 // LED morado PWM
 const int LED_PWM_CHANNEL = 1;
@@ -437,6 +434,7 @@ void updateFan(bool force = false) {
     fanApplied = target;
     fanPercent = target;
   }
+  fanRpm = (unsigned long)fanApplied * 30;  // estimado: 100% ≈ 3000 RPM
 }
 
 // =========================================================
@@ -1417,11 +1415,6 @@ void setup() {
   initIrrigationHardware();
   initFan();
 
-  // Tachometro del ventilador
-  pinMode(PIN_FAN_TACH, INPUT);  // pull-up externo requerido
-  attachInterrupt(digitalPinToInterrupt(PIN_FAN_TACH), onFanTach, FALLING);
-  lastFanTachMs = millis();
-
   pinMode(PIN_ACLIGHT, OUTPUT);
   digitalWrite(PIN_ACLIGHT, HIGH);
   ledcSetup(LED_PWM_CHANNEL, LED_PWM_FREQ, LED_PWM_RES);
@@ -1528,16 +1521,6 @@ void loop() {
   if (now - lastFanMs >= 2000) {
     lastFanMs = now;
     updateFan();
-    // Calcular RPM: 2 pulsos por revolucion
-    unsigned long elapsed = now - lastFanTachMs;
-    if (elapsed > 0) {
-      noInterrupts();
-      unsigned long count = fanTachCount;
-      fanTachCount = 0;
-      interrupts();
-      lastFanTachMs = now;
-      fanRpm = (count * 30000UL) / elapsed;  // count*60000/(elapsed*2)
-    }
   }
 
   if (now - lastSoilMs >= 2000) {
