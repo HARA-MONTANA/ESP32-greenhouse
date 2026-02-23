@@ -141,7 +141,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 .csec[open] summary{border-bottom:1px solid var(--border)}
 .cbody{background:var(--bg2);padding:14px}
 .cfield{display:grid;grid-template-columns:150px 1fr auto;gap:7px;align-items:center;margin-bottom:9px}
-.cfield label{font-size:.76rem;color:var(--text2)}
+.cfield label{font-size:.76rem;color:var(--text2)}.cfield-note{font-size:.68rem;color:var(--text2);opacity:.65;font-style:italic;display:block;margin-top:1px}
 @media(max-width:580px){.cfield{grid-template-columns:1fr}}
 .cnote{font-size:.72rem;color:var(--text2);margin-bottom:9px;line-height:1.5}
 .cact{margin-top:11px;display:flex;gap:7px;flex-wrap:wrap}
@@ -486,11 +486,11 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         <input type="number" id="cfg-tmax" min="20" max="45" value="30">
       </div>
       <div class="cfield">
-        <label>Humedad minima (%)</label>
+        <label>Humedad minima (%) <span class="cfield-note">Plantula &amp; Vegetativo</span></label>
         <input type="number" id="cfg-hmin" min="10" max="80" value="45">
       </div>
       <div class="cfield">
-        <label>Humedad maxima (%)</label>
+        <label>Humedad maxima (%) <span class="cfield-note">Pre-flor &middot; Floracion &middot; Final</span></label>
         <input type="number" id="cfg-hmax" min="20" max="95" value="60">
       </div>
       <div class="cfield">
