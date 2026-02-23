@@ -5,1199 +5,861 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Greenhouse Dashboard</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <style>
-    :root {
-      --bg-page:   #060115;
-      --bg-card:   #120458;
-      --c1:        #ff124f;
-      --c2:        #ff00a0;
-      --c3:        #fe75fe;
-      --c4:        #7a04eb;
-      --text-main: #fe75fe;
-      --text-dim:  #9b59b6;
-      --border:    #7a04eb55;
-      --col-low:   #39ff14;
-      --col-mid:   #ff8c00;
-      --col-high:  #ff124f;
-    }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    body {
-      background: var(--bg-page);
-      color: var(--text-main);
-      font-family: 'Courier New', Courier, monospace;
-      min-height: 100vh;
-    }
-
-    /* ── HEADER ── */
-    header {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 1rem 1.4rem;
-      border-bottom: 1px solid var(--border);
-      background: #0a021888;
-      backdrop-filter: blur(6px);
-      position: sticky;
-      top: 0;
-      z-index: 20;
-    }
-
-    header h1 {
-      font-size: 1.25rem;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      color: var(--c1);
-      text-shadow: 0 0 16px #ff124f99;
-      flex: 1;
-    }
-
-    #ip-label {
-      font-size: 0.72rem;
-      color: var(--text-dim);
-      letter-spacing: 0.05em;
-    }
-
-    #ws-dot {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      background: var(--c1);
-      box-shadow: 0 0 12px #ff124f88;
-      transition: background 0.4s, box-shadow 0.4s;
-      flex-shrink: 0;
-    }
-    #ws-dot.connected    { background: #39ff14; box-shadow: 0 0 12px #39ff1488; }
-    #ws-dot.disconnected { background: var(--c1); box-shadow: 0 0 12px #ff124f88; }
-
-    /* settings gear button */
-    #btn-settings {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--text-dim);
-      border-radius: 6px;
-      padding: 0.35rem 0.6rem;
-      cursor: pointer;
-      font-size: 1rem;
-      line-height: 1;
-      transition: border-color 0.2s, color 0.2s, box-shadow 0.2s;
-      flex-shrink: 0;
-    }
-    #btn-settings:hover,
-    #btn-settings.active {
-      border-color: var(--c4);
-      color: var(--c3);
-      box-shadow: 0 0 10px #7a04eb66;
-    }
-
-    /* ── SETTINGS PANEL ── */
-    #settings-panel {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.38s cubic-bezier(0.4,0,0.2,1),
-                  opacity    0.28s ease;
-      opacity: 0;
-      background: #0d0330;
-      border-bottom: 1px solid var(--border);
-      z-index: 15;
-      position: relative;
-    }
-    #settings-panel.open {
-      max-height: 700px;
-      opacity: 1;
-    }
-
-    .settings-inner {
-      padding: 1rem 1.4rem 1.2rem;
-    }
-
-    .settings-title {
-      font-size: 0.68rem;
-      letter-spacing: 0.2em;
-      text-transform: uppercase;
-      color: var(--c4);
-      margin-bottom: 0.9rem;
-    }
-
-    .settings-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1rem;
-    }
-
-    .sensor-thresholds {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 0.85rem 1rem;
-    }
-
-    .sensor-thresholds h3 {
-      font-size: 0.65rem;
-      letter-spacing: 0.15em;
-      text-transform: uppercase;
-      margin-bottom: 0.7rem;
-    }
-
-    .threshold-row {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      margin-bottom: 0.55rem;
-    }
-
-    .threshold-row label {
-      font-size: 0.62rem;
-      color: var(--text-dim);
-      width: 5.5rem;
-      flex-shrink: 0;
-      white-space: nowrap;
-    }
-
-    /* zone dot preview */
-    .zone-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .zone-dot.low  { background: var(--col-low);  box-shadow: 0 0 6px #39ff1488; }
-    .zone-dot.mid  { background: var(--col-mid);  box-shadow: 0 0 6px #ff8c0088; }
-    .zone-dot.high { background: var(--col-high); box-shadow: 0 0 6px #ff124f88; }
-
-    /* range slider */
-    input[type=range] {
-      flex: 1;
-      -webkit-appearance: none;
-      height: 4px;
-      border-radius: 2px;
-      background: #2a1060;
-      outline: none;
-      cursor: pointer;
-    }
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 14px; height: 14px;
-      border-radius: 50%;
-      background: var(--c4);
-      box-shadow: 0 0 6px #7a04ebaa;
-      transition: background 0.2s, box-shadow 0.2s;
-    }
-    input[type=range]::-webkit-slider-thumb:hover {
-      background: var(--c3);
-      box-shadow: 0 0 10px #fe75feaa;
-    }
-
-    .threshold-val {
-      font-size: 0.62rem;
-      color: var(--text-main);
-      width: 3.2rem;
-      text-align: right;
-      flex-shrink: 0;
-    }
-
-    /* zone color strip (visual reference) */
-    .color-strip {
-      height: 4px;
-      border-radius: 2px;
-      margin-top: 0.6rem;
-      background: linear-gradient(90deg,
-        var(--col-low) 0%,
-        var(--col-mid) 50%,
-        var(--col-high) 100%);
-      opacity: 0.65;
-    }
-
-    .settings-footer {
-      margin-top: 0.85rem;
-      display: flex;
-      gap: 0.6rem;
-    }
-
-    .btn-reset {
-      background: none;
-      border: 1px solid #7a04eb55;
-      color: var(--text-dim);
-      border-radius: 6px;
-      padding: 0.3rem 0.8rem;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 0.65rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      cursor: pointer;
-      transition: border-color 0.2s, color 0.2s;
-    }
-    .btn-reset:hover {
-      border-color: var(--c4);
-      color: var(--c3);
-    }
-
-    /* ── GRID ── */
-    #grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 1.2rem;
-      padding: 1.2rem;
-    }
-
-    /* ── CARD ── */
-    .card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 1.1rem 1.1rem 0.9rem;
-      cursor: pointer;
-      transition: border-color 0.2s, box-shadow 0.2s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--card-color, var(--c4)), transparent);
-      opacity: 0.8;
-    }
-
-    .card:hover {
-      border-color: var(--card-color, var(--c4));
-      box-shadow: 0 0 22px color-mix(in srgb, var(--card-color, var(--c4)) 40%, transparent);
-    }
-
-    .card.expanded {
-      border-color: var(--card-color, var(--c4));
-      box-shadow: 0 0 28px color-mix(in srgb, var(--card-color, var(--c4)) 50%, transparent);
-    }
-
-    .card-header {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      margin-bottom: 0.4rem;
-    }
-
-    .card-title {
-      font-size: 0.72rem;
-      letter-spacing: 0.18em;
-      text-transform: uppercase;
-      color: var(--text-dim);
-    }
-
-    .expand-hint {
-      font-size: 0.62rem;
-      color: var(--text-dim);
-      opacity: 0.5;
-      letter-spacing: 0.05em;
-    }
-
-    /* zone badge: shows current zone name */
-    .zone-badge {
-      font-size: 0.6rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      padding: 0.15rem 0.45rem;
-      border-radius: 4px;
-      border: 1px solid currentColor;
-      opacity: 0.85;
-      transition: color 0.5s, border-color 0.5s;
-      flex-shrink: 0;
-    }
-
-    /* zone strip below card title */
-    .card-zones {
-      display: flex;
-      gap: 3px;
-      margin-bottom: 0.5rem;
-      height: 3px;
-    }
-    .zone-seg {
-      border-radius: 2px;
-      height: 3px;
-      flex: 1;
-      transition: opacity 0.4s;
-      opacity: 0.3;
-    }
-    .zone-seg.active { opacity: 1; }
-    .zone-seg.low  { background: var(--col-low); }
-    .zone-seg.mid  { background: var(--col-mid); }
-    .zone-seg.high { background: var(--col-high); }
-
-    /* ── GAUGE ── */
-    .gauge-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .gauge-svg {
-      width: 100%;
-      max-width: 200px;
-      overflow: visible;
-    }
-
-    .gauge-track {
-      fill: none;
-      stroke: #1a0a3a;
-      stroke-width: 9;
-      stroke-linecap: round;
-    }
-
-    .gauge-arc {
-      fill: none;
-      stroke-width: 9;
-      stroke-linecap: round;
-      transition: stroke-dasharray 0.5s cubic-bezier(0.4,0,0.2,1),
-                  stroke 0.5s ease,
-                  filter 0.5s ease;
-    }
-
-    .gauge-value {
-      font-size: 1.55rem;
-      font-weight: 700;
-      font-family: 'Courier New', Courier, monospace;
-      fill: var(--text-main);
-      transition: fill 0.5s ease;
-    }
-
-    .gauge-unit {
-      font-size: 0.78rem;
-      fill: var(--text-dim);
-      font-family: 'Courier New', Courier, monospace;
-    }
-
-    .gauge-min, .gauge-max {
-      font-size: 0.62rem;
-      fill: #7a04eb88;
-      font-family: 'Courier New', Courier, monospace;
-    }
-
-    .gauge-label-text {
-      font-size: 0.65rem;
-      fill: var(--text-dim);
-      font-family: 'Courier New', Courier, monospace;
-      letter-spacing: 0.12em;
-    }
-
-    /* ── CHART WRAP ── */
-    .chart-wrap {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.38s cubic-bezier(0.4,0,0.2,1),
-                  opacity 0.3s ease;
-      opacity: 0;
-    }
-
-    .card.expanded .chart-wrap {
-      max-height: 260px;
-      opacity: 1;
-    }
-
-    .chart-inner {
-      position: relative;
-      height: 220px;
-      margin-top: 0.8rem;
-      border-top: 1px solid var(--border);
-      padding-top: 0.6rem;
-    }
-
-    /* ── SCANLINE ── */
-    body::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background: repeating-linear-gradient(
-        0deg,
-        transparent, transparent 2px,
-        #00000018 2px, #00000018 4px
-      );
-      pointer-events: none;
-      z-index: 999;
-    }
-
-    /* ── LOGS PANEL ── */
-    #logs-panel {
-      margin: 1.2rem 1rem 2rem;
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 1.2rem 1.4rem;
-      box-shadow: 0 0 24px #7a04eb22;
-    }
-    .logs-section-title {
-      font-size: 0.68rem;
-      letter-spacing: 0.22em;
-      text-transform: uppercase;
-      color: var(--c4);
-      margin-bottom: 1rem;
-    }
-    .logs-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 0.6rem;
-      margin-bottom: 0.9rem;
-    }
-    .logs-toolbar label {
-      font-size: 0.65rem;
-      color: var(--text-dim);
-      letter-spacing: 0.1em;
-    }
-    #log-month-select {
-      background: #060115;
-      color: var(--text-main);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.3rem 0.6rem;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 0.72rem;
-      cursor: pointer;
-    }
-    #log-file-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.45rem;
-      margin-bottom: 0.9rem;
-      min-height: 1.8rem;
-    }
-    .log-file-btn {
-      background: none;
-      border: 1px solid var(--border);
-      color: var(--text-dim);
-      border-radius: 6px;
-      padding: 0.25rem 0.65rem;
-      font-family: 'Courier New', Courier, monospace;
-      font-size: 0.65rem;
-      cursor: pointer;
-      transition: border-color 0.18s, color 0.18s, box-shadow 0.18s;
-    }
-    .log-file-btn:hover, .log-file-btn.active {
-      border-color: var(--c2);
-      color: var(--c2);
-      box-shadow: 0 0 8px #ff00a044;
-    }
-    #log-status {
-      font-size: 0.65rem;
-      color: var(--text-dim);
-      letter-spacing: 0.06em;
-      margin-bottom: 0.7rem;
-      min-height: 1rem;
-    }
-    #log-table-wrap {
-      overflow-x: auto;
-      overflow-y: auto;
-      max-height: 420px;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-    }
-    #log-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.65rem;
-    }
-    #log-table th {
-      background: #0d0330;
-      color: var(--c4);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      padding: 0.4rem 0.7rem;
-      border-bottom: 1px solid var(--border);
-      text-align: left;
-      white-space: nowrap;
-      position: sticky;
-      top: 0;
-      z-index: 2;
-    }
-    #log-table td {
-      padding: 0.28rem 0.7rem;
-      border-bottom: 1px solid #7a04eb18;
-      white-space: nowrap;
-    }
-    #log-table tr:last-child td { border-bottom: none; }
-    #log-table tr:hover td { background: #7a04eb14; }
-    /* colores por tipo */
-    .lt-SENSOR    { color: var(--c3); }
-    .lt-RIEGO     { color: #39ff14; }
-    .lt-ALERTA_ON { color: var(--col-high); }
-    .lt-ALERTA_OFF{ color: var(--col-mid); }
-    .lt-LUZ_ON    { color: #ffe600; }
-    .lt-LUZ_OFF   { color: #555577; }
-    .lt-VENT      { color: #00e5ff; }
-    .lt-CMD       { color: var(--c2); }
-    .lt-INICIO    { color: var(--text-dim); }
-    #logs-unavailable {
-      font-size: 0.72rem;
-      color: var(--col-high);
-      letter-spacing: 0.08em;
-    }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Greenhouse</title>
+<style>
+:root{
+  --bg:#060115;--bg2:#0d0230;--bg3:#120458;
+  --c1:#7a04eb;--c2:#fe75fe;--c3:#ff00a0;--c4:#ff124f;
+  --neon:#39ff14;--cyan:#00e5ff;--warn:#ff8c00;
+  --text:#e8d5ff;--text2:#9b59b6;--border:#7a04eb55;
+  --r:10px;--gap:12px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Courier New',monospace;min-height:100vh}
+a{color:inherit;text-decoration:none}
+/* Header */
+header{
+  display:flex;align-items:center;flex-wrap:wrap;gap:8px;
+  background:var(--bg2);padding:9px 14px;
+  border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;
+}
+h1{font-size:1rem;color:var(--c2);white-space:nowrap;letter-spacing:.06em}
+nav{display:flex;gap:3px}
+.tab-btn{
+  background:none;border:none;color:var(--text2);
+  padding:5px 12px;border-radius:5px;cursor:pointer;font-size:.78rem;font-family:inherit;
+  border-bottom:2px solid transparent;transition:all .2s;
+}
+.tab-btn.active{color:var(--c2);border-bottom-color:var(--c2);background:rgba(254,117,254,.07)}
+.tab-btn:hover:not(.active){background:rgba(255,255,255,.04)}
+#tg-link{
+  display:none;align-items:center;gap:4px;
+  background:rgba(0,172,238,.12);border:1px solid #00acee44;
+  color:#00acee;padding:4px 9px;border-radius:5px;font-size:.75rem;
+}
+#tg-link:hover{background:rgba(0,172,238,.22)}
+.hdr-right{display:flex;align-items:center;gap:10px;margin-left:auto;font-size:.75rem;color:var(--text2)}
+#ws-dot{width:8px;height:8px;border-radius:50%;background:var(--c4);flex-shrink:0}
+#ws-dot.ok{background:var(--neon)}
+/* Main */
+main{max-width:1200px;margin:0 auto;padding:var(--gap)}
+/* Card */
+.card{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:12px;
+}
+.card-title{font-size:.72rem;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+/* Sensor grid */
+#sensor-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap);margin-bottom:var(--gap)}
+@media(max-width:680px){#sensor-grid{grid-template-columns:repeat(2,1fr)}}
+.s-card{text-align:center;transition:border-color .3s}
+.s-card.card--alert{border-color:var(--c4)!important;animation:pulse-alert 1.4s infinite}
+@keyframes pulse-alert{0%,100%{box-shadow:0 0 16px #ff124f44}50%{box-shadow:0 0 28px #ff124faa}}
+.gauge-wrap{position:relative;width:100%;padding-top:58%;margin-bottom:6px}
+.gauge-wrap svg{position:absolute;top:0;left:0;width:100%;height:100%}
+.gauge-label{font-size:.76rem;color:var(--text2)}
+/* Mid row */
+#mid-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);margin-bottom:var(--gap)}
+@media(max-width:680px){#mid-row{grid-template-columns:1fr}}
+/* Camera */
+.cam-ctrl{display:flex;gap:5px;margin-bottom:8px}
+.cam-ctrl input{flex:1}
+.cam-wrap{position:relative;background:#000;border-radius:7px;overflow:hidden;aspect-ratio:16/9}
+#cam-feed{width:100%;height:100%;object-fit:cover;display:none}
+#cam-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:.82rem}
+/* Events */
+#ev-list{list-style:none;display:flex;flex-direction:column;gap:5px}
+.ev-row{display:flex;align-items:center;gap:7px;font-size:.76rem;padding:3px 0;border-bottom:1px solid var(--border)}
+.ev-badge{font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:3px;white-space:nowrap}
+.ev-RIEGO{background:#00e5ff18;color:#00e5ff}
+.ev-LUZ_ON{background:#39ff1418;color:#39ff14}
+.ev-LUZ_OFF{background:#ffffff0a;color:#888}
+.ev-ALERTA_ON{background:#ff124f18;color:#ff124f}
+.ev-ALERTA_OFF{background:#39ff1418;color:#39ff14}
+.ev-time{color:var(--text2);flex-shrink:0}
+.ev-detail{color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+/* Actions */
+#actions-section{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--gap);margin-bottom:var(--gap)}
+@media(max-width:580px){#actions-section{grid-template-columns:1fr}}
+.badge{display:inline-block;font-size:.66rem;font-weight:700;padding:2px 7px;border-radius:10px;margin-bottom:7px;letter-spacing:.04em}
+.b-on{background:#39ff1418;color:#39ff14;border:1px solid #39ff1440}
+.b-off{background:#ff124f18;color:#ff124f;border:1px solid #ff124f40}
+.b-auto{background:#00e5ff18;color:#00e5ff;border:1px solid #00e5ff40}
+.b-manual{background:#fe75fe18;color:#fe75fe;border:1px solid #fe75fe40}
+.btn{
+  border:none;border-radius:5px;padding:5px 12px;cursor:pointer;font-size:.76rem;
+  font-family:inherit;font-weight:700;transition:all .15s;
+}
+.btn-p{background:var(--c1);color:#fff}
+.btn-p:hover{background:#9010ff}
+.btn-o{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.btn-o:hover{border-color:var(--c2);color:var(--c2)}
+.btn-d{background:var(--c4);color:#fff}
+.btn.fok{background:var(--neon)!important;color:#000!important}
+.btn.ferr{background:var(--c4)!important;color:#fff!important}
+.ctrl-row{display:flex;align-items:center;gap:7px;margin-top:6px;flex-wrap:wrap}
+.ctrl-lbl{font-size:.72rem;color:var(--text2);min-width:65px}
+input[type=range]{
+  -webkit-appearance:none;width:100%;height:3px;border-radius:2px;
+  background:var(--border);outline:none;cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:13px;height:13px;border-radius:50%;
+  background:var(--c2);cursor:pointer;
+}
+.sval{font-size:.72rem;color:var(--c2);min-width:32px;text-align:right}
+input[type=number],input[type=text],input[type=password],select{
+  background:var(--bg3);border:1px solid var(--border);
+  color:var(--text);padding:5px 9px;border-radius:5px;font-size:.76rem;
+  font-family:inherit;width:100%;
+}
+select option{background:var(--bg2)}
+.irow{display:flex;gap:5px;align-items:center;margin-top:6px}
+.irow input{flex:1}
+.tank{font-size:.76rem;margin-top:4px}
+/* Logs */
+#log-tb{display:flex;gap:7px;margin-bottom:10px;flex-wrap:wrap;align-items:center}
+#log-month,#log-file{width:auto;min-width:120px}
+#log-wrap{overflow-x:auto;max-height:55vh;font-size:.72rem}
+table{border-collapse:collapse;width:100%;min-width:480px}
+th,td{padding:4px 9px;text-align:left;border-bottom:1px solid var(--border)}
+th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
+.lt-RIEGO{color:#00e5ff}.lt-LUZ_ON{color:#39ff14}.lt-LUZ_OFF{color:#777}
+.lt-ALERTA_ON{color:#ff124f}.lt-ALERTA_OFF{color:#39ff14}.lt-INFO{color:#aaa}
+/* Config */
+#view-config{display:flex;flex-direction:column;gap:9px}
+.csec{border-radius:var(--r);overflow:hidden;border:1px solid var(--border)}
+.csec summary{
+  display:flex;align-items:center;gap:9px;
+  background:var(--bg2);padding:11px 14px;cursor:pointer;
+  list-style:none;font-weight:700;font-size:.82rem;
+  border-left:3px solid var(--c1);
+}
+.csec summary::-webkit-details-marker{display:none}
+.csec[open] summary{border-bottom:1px solid var(--border)}
+.cbody{background:var(--bg2);padding:14px}
+.cfield{display:grid;grid-template-columns:150px 1fr auto;gap:7px;align-items:center;margin-bottom:9px}
+.cfield label{font-size:.76rem;color:var(--text2)}
+@media(max-width:580px){.cfield{grid-template-columns:1fr}}
+.cnote{font-size:.72rem;color:var(--text2);margin-bottom:9px;line-height:1.5}
+.cact{margin-top:11px;display:flex;gap:7px;flex-wrap:wrap}
+.ml-tbl{width:100%;border-collapse:collapse;font-size:.76rem;margin:7px 0}
+.ml-tbl td{padding:4px;border-bottom:1px solid var(--border)}
+.ml-tbl td:first-child{color:var(--text2);width:110px}
+.ml-tbl td:last-child{width:44px}
+.ml-tbl input{width:80px}
+.pwd-wrap{position:relative;display:flex}
+.pwd-wrap input{flex:1;padding-right:34px}
+.eye{position:absolute;right:7px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text2);cursor:pointer;font-size:.8rem}
+.srow{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.srow label{width:130px;font-size:.76rem;color:var(--text2);flex-shrink:0}
+.srow input[type=range]{flex:1}
+</style>
 </head>
 <body>
 
 <!-- HEADER -->
 <header>
-  <h1>&#9672; Greenhouse</h1>
-  <span id="ip-label"></span>
-  <span id="ws-dot" class="disconnected"></span>
-  <button id="btn-settings" title="Ajustar umbrales de color">&#9881;</button>
+  <h1>&#9670; Greenhouse</h1>
+  <nav>
+    <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button>
+    <button class="tab-btn" data-tab="logs" onclick="showTab('logs')">Logs</button>
+    <button class="tab-btn" data-tab="config" onclick="showTab('config')">Config</button>
+  </nav>
+  <a id="tg-link" href="#" target="_blank" rel="noopener">&#129302; Bot</a>
+  <div class="hdr-right">
+    <span id="ip-lbl"></span>
+    <span id="clock">--:--:--</span>
+    <span id="ws-dot" title="WebSocket"></span>
+  </div>
 </header>
 
-<!-- SETTINGS PANEL -->
-<div id="settings-panel">
-  <div class="settings-inner">
-    <div class="settings-title">&#9881; Umbrales de color de los gauges</div>
-    <p style="font-size:0.62rem;color:var(--text-dim);margin-bottom:0.9rem;letter-spacing:0.05em;">
-      Defini en qué valores cambia el color del arco: bajo &#9679; medio &#9679; alto.<br>
-      Los cambios se guardan automáticamente en el navegador.
-    </p>
+<main>
 
-    <div class="settings-grid" id="settings-grid">
-      <!-- generado por JS -->
+<!-- ===== DASHBOARD ===== -->
+<div id="view-dashboard">
+
+  <!-- Sensor gauges -->
+  <div id="sensor-grid">
+
+    <div class="card s-card" id="card-temp">
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 120 72" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#1a0840" stroke-width="9" stroke-linecap="round"/>
+          <path id="arc-temp" d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#7a04eb" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset .6s,stroke .4s"/>
+          <text x="60" y="62" text-anchor="middle" fill="#e8d5ff" font-size="19" font-weight="bold" id="txt-temp" font-family="Courier New">--</text>
+          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">C</text>
+        </svg>
+      </div>
+      <div class="gauge-label">&#127777; Temperatura</div>
     </div>
 
-    <div class="settings-footer">
-      <button class="btn-reset" id="btn-reset-all">&#8635; Restaurar defaults</button>
+    <div class="card s-card" id="card-rh">
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 120 72" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#1a0840" stroke-width="9" stroke-linecap="round"/>
+          <path id="arc-rh" d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#00e5ff" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset .6s,stroke .4s"/>
+          <text x="60" y="62" text-anchor="middle" fill="#e8d5ff" font-size="19" font-weight="bold" id="txt-rh" font-family="Courier New">--</text>
+          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">%</text>
+        </svg>
+      </div>
+      <div class="gauge-label">&#128167; Humedad</div>
     </div>
+
+    <div class="card s-card" id="card-soil">
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 120 72" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#1a0840" stroke-width="9" stroke-linecap="round"/>
+          <path id="arc-soil" d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#39ff14" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset .6s,stroke .4s"/>
+          <text x="60" y="62" text-anchor="middle" fill="#e8d5ff" font-size="19" font-weight="bold" id="txt-soil" font-family="Courier New">--</text>
+          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">%</text>
+        </svg>
+      </div>
+      <div class="gauge-label">&#127807; Suelo</div>
+    </div>
+
+    <div class="card s-card" id="card-mq">
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 120 72" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#1a0840" stroke-width="9" stroke-linecap="round"/>
+          <path id="arc-mq" d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#fe75fe" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset .6s,stroke .4s"/>
+          <text x="60" y="62" text-anchor="middle" fill="#e8d5ff" font-size="19" font-weight="bold" id="txt-mq" font-family="Courier New">--</text>
+          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">raw</text>
+        </svg>
+      </div>
+      <div class="gauge-label">&#127787; Aire MQ</div>
+    </div>
+
+  </div><!-- /sensor-grid -->
+
+  <!-- Mid row -->
+  <div id="mid-row">
+
+    <!-- Camera -->
+    <div class="card">
+      <div class="card-title">&#128249; Camara</div>
+      <div class="cam-ctrl">
+        <input type="text" id="cam-url" placeholder="http://192.168.x.x/stream">
+        <button class="btn btn-p" onclick="camConnect()">Conectar</button>
+        <button class="btn btn-o" onclick="camDisconnect()">&#10005;</button>
+      </div>
+      <div class="cam-wrap">
+        <img id="cam-feed" alt="" onerror="camErr()">
+        <div id="cam-ph">Sin senial</div>
+      </div>
+    </div>
+
+    <!-- Events -->
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>&#128203; Ultima actividad</span>
+        <button class="btn btn-o" style="padding:2px 7px;font-size:.7rem" onclick="loadEvents()">&#8635;</button>
+      </div>
+      <ul id="ev-list"><li style="color:var(--text2);font-size:.76rem">Cargando...</li></ul>
+    </div>
+
+  </div><!-- /mid-row -->
+
+  <!-- Action cards -->
+  <div id="actions-section">
+
+    <!-- LED -->
+    <div class="card">
+      <div class="card-title">&#128161; LED Morado</div>
+      <span id="led-badge" class="badge b-off">OFF</span>
+      <div class="ctrl-row">
+        <button class="btn btn-p" onclick="sc({cmd:'led',args:'on'},this)">ON</button>
+        <button class="btn btn-o" onclick="sc({cmd:'led',args:'off'},this)">OFF</button>
+      </div>
+      <div class="ctrl-row">
+        <span class="ctrl-lbl">Intensidad</span>
+        <input type="range" id="led-sl" min="1" max="100" value="80"
+          oninput="document.getElementById('led-sv').textContent=this.value+'%'"
+          onchange="sc({cmd:'led',args:this.value},this)">
+        <span id="led-sv" class="sval">80%</span>
+      </div>
+    </div>
+
+    <!-- Fan -->
+    <div class="card">
+      <div class="card-title">&#127744; Ventiladores</div>
+      <span id="fan-badge" class="badge b-auto">AUTO</span>
+      <div class="ctrl-row">
+        <span class="ctrl-lbl">Velocidad</span>
+        <input type="range" id="fan-sl" min="0" max="100" value="0"
+          oninput="document.getElementById('fan-sv').textContent=this.value+'%'"
+          onchange="sc({cmd:'vent',args:this.value},this)">
+        <span id="fan-sv" class="sval">0%</span>
+      </div>
+      <div class="ctrl-row">
+        <button class="btn btn-o" id="fan-auto-btn" onclick="toggleFanAuto(this)">Auto: ON</button>
+      </div>
+    </div>
+
+    <!-- Riego -->
+    <div class="card">
+      <div class="card-title">&#128167; Riego</div>
+      <span id="irr-badge" class="badge b-auto">AUTO ON</span>
+      <div class="ctrl-row">
+        <button class="btn btn-p" id="irr-btn" onclick="toggleAutoIrr(this)">Auto-riego</button>
+      </div>
+      <div class="irow">
+        <input type="number" id="irr-ml" min="50" max="1500" value="300" placeholder="mL">
+        <button class="btn btn-o" onclick="sc({cmd:'regar',args:document.getElementById('irr-ml').value},this)">Regar</button>
+      </div>
+      <div class="tank" id="tank">&#11036; Tanque: ---</div>
+    </div>
+
+    <!-- Bomba -->
+    <div class="card">
+      <div class="card-title">&#9881; Bomba</div>
+      <div id="pump-st" style="font-size:.76rem;margin-bottom:7px">&#11036; Sin datos</div>
+      <div class="ctrl-row">
+        <button class="btn btn-d" onclick="calPump(this)">Calibrar 5s</button>
+      </div>
+      <div class="irow" style="margin-top:7px">
+        <input type="number" id="caudal-ml" min="1" max="9999" placeholder="mL recolectados">
+        <button class="btn btn-o" onclick="sc({cmd:'caudal',args:document.getElementById('caudal-ml').value},this)">Guardar</button>
+      </div>
+    </div>
+
+  </div><!-- /actions-section -->
+
+</div><!-- /view-dashboard -->
+
+<!-- ===== LOGS ===== -->
+<div id="view-logs" hidden>
+  <div class="card">
+    <div id="log-tb">
+      <select id="log-month" onchange="loadMonth()"><option>-- Mes --</option></select>
+      <select id="log-file" onchange="loadLogFile()"><option>-- Archivo --</option></select>
+      <a id="log-dl" class="btn btn-o" style="text-decoration:none;padding:5px 12px" hidden>&#11015; Descargar</a>
+    </div>
+    <div id="log-wrap"><p style="color:var(--text2);font-size:.8rem">Selecciona un mes y archivo.</p></div>
   </div>
 </div>
 
-<!-- SENSOR GRID -->
-<div id="grid">
+<!-- ===== CONFIG ===== -->
+<div id="view-config" hidden>
 
-  <!-- TEMPERATURE -->
-  <div class="card" data-sensor="temp" style="--card-color:#ff124f;">
-    <div class="card-header">
-      <span class="card-title">Temperatura</span>
-      <span class="zone-badge" id="badge-temp">--</span>
-      <span class="expand-hint">[ expandir ]</span>
+  <!-- Telegram -->
+  <details class="csec" open>
+    <summary style="border-left-color:#00acee">&#129302; Telegram</summary>
+    <div class="cbody">
+      <p class="cnote">El token no se muestra por seguridad. Ingresa uno nuevo para cambiarlo.</p>
+      <div class="cfield">
+        <label>Token del bot</label>
+        <div class="pwd-wrap">
+          <input type="password" id="tg-tok" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;">
+          <button class="eye" onclick="togglePwd('tg-tok',this)">&#128065;</button>
+        </div>
+      </div>
+      <div class="cfield">
+        <label>Nombre del bot</label>
+        <input type="text" id="tg-name" placeholder="@MiGreenhouseBot">
+      </div>
+      <div id="tg-prev" style="font-size:.75rem;color:#00acee;margin:5px 0 9px;display:none">
+        Enlace: <a id="tg-prev-lnk" href="#" target="_blank" style="color:#00acee"></a>
+      </div>
+      <div class="cact">
+        <button class="btn btn-p" onclick="saveTelegram()">&#128190; Guardar Telegram</button>
+      </div>
     </div>
-    <div class="card-zones">
-      <div class="zone-seg low"  id="zseg-temp-low"></div>
-      <div class="zone-seg mid"  id="zseg-temp-mid"></div>
-      <div class="zone-seg high" id="zseg-temp-high"></div>
-    </div>
-    <div class="gauge-wrap">
-      <svg class="gauge-svg" viewBox="0 0 160 100">
-        <path class="gauge-track" d="M 18 88 A 62 62 0 0 1 142 88"/>
-        <path class="gauge-arc" id="arc-temp"
-          stroke="#39ff14"
-          stroke-dasharray="0 195"
-          d="M 18 88 A 62 62 0 0 1 142 88"/>
-        <text class="gauge-value" id="val-temp" x="80" y="76" text-anchor="middle">--</text>
-        <text class="gauge-unit"  id="unit-temp" x="80" y="90" text-anchor="middle">°C</text>
-        <text class="gauge-min"  x="14"  y="100" text-anchor="middle">0</text>
-        <text class="gauge-max"  x="146" y="100" text-anchor="middle">50</text>
-        <text class="gauge-label-text" x="80" y="100" text-anchor="middle">TEMP</text>
-      </svg>
-    </div>
-    <div class="chart-wrap">
-      <div class="chart-inner"><canvas id="canvas-temp"></canvas></div>
-    </div>
-  </div>
+  </details>
 
-  <!-- HUMIDITY -->
-  <div class="card" data-sensor="rh" style="--card-color:#ff00a0;">
-    <div class="card-header">
-      <span class="card-title">Humedad Aire</span>
-      <span class="zone-badge" id="badge-rh">--</span>
-      <span class="expand-hint">[ expandir ]</span>
-    </div>
-    <div class="card-zones">
-      <div class="zone-seg low"  id="zseg-rh-low"></div>
-      <div class="zone-seg mid"  id="zseg-rh-mid"></div>
-      <div class="zone-seg high" id="zseg-rh-high"></div>
-    </div>
-    <div class="gauge-wrap">
-      <svg class="gauge-svg" viewBox="0 0 160 100">
-        <path class="gauge-track" d="M 18 88 A 62 62 0 0 1 142 88"/>
-        <path class="gauge-arc" id="arc-rh"
-          stroke="#39ff14"
-          stroke-dasharray="0 195"
-          d="M 18 88 A 62 62 0 0 1 142 88"/>
-        <text class="gauge-value" id="val-rh" x="80" y="76" text-anchor="middle">--</text>
-        <text class="gauge-unit"  id="unit-rh" x="80" y="90" text-anchor="middle">%</text>
-        <text class="gauge-min"  x="14"  y="100" text-anchor="middle">0</text>
-        <text class="gauge-max"  x="146" y="100" text-anchor="middle">100</text>
-        <text class="gauge-label-text" x="80" y="100" text-anchor="middle">HR</text>
-      </svg>
-    </div>
-    <div class="chart-wrap">
-      <div class="chart-inner"><canvas id="canvas-rh"></canvas></div>
-    </div>
-  </div>
+  <!-- Planta -->
+  <details class="csec" open>
+    <summary style="border-left-color:#39ff14">&#127807; Planta</summary>
+    <div class="cbody">
+      <div class="cfield">
+        <label>Etapa actual</label>
+        <select id="cfg-stage" onchange="sc({cmd:'etapa',args:this.value})">
+          <option value="pl">Plantula</option>
+          <option value="veg">Vegetativo</option>
+          <option value="pre">Pre-floracion</option>
+          <option value="flo">Floracion</option>
+          <option value="fin">Final</option>
+        </select>
+      </div>
+      <div class="cfield">
+        <label>Maceta (L)</label>
+        <input type="number" id="cfg-pot" min="1" max="50" value="5">
+        <button class="btn btn-o" onclick="sc({cmd:'maceta',args:document.getElementById('cfg-pot').value},this)">Guardar</button>
+      </div>
+      <div class="cfield">
+        <label>Dias entre riegos</label>
+        <input type="number" id="cfg-pause" min="1" max="5" value="2">
+        <button class="btn btn-o" onclick="sc({cmd:'pausariego',args:document.getElementById('cfg-pause').value},this)">Guardar</button>
+      </div>
+      <div class="cfield">
+        <label>Intensidad LED (%)</label>
+        <div class="srow" style="flex:1;margin:0">
+          <input type="range" min="1" max="100" id="cfg-led" oninput="document.getElementById('cfg-led-v').textContent=this.value+'%'">
+          <span id="cfg-led-v" class="sval">80%</span>
+        </div>
+        <button class="btn btn-o" onclick="sc({cmd:'led',args:document.getElementById('cfg-led').value},this)">Guardar</button>
+      </div>
 
-  <!-- SOIL MOISTURE -->
-  <div class="card" data-sensor="soil" style="--card-color:#fe75fe;">
-    <div class="card-header">
-      <span class="card-title">Humedad Suelo</span>
-      <span class="zone-badge" id="badge-soil">--</span>
-      <span class="expand-hint">[ expandir ]</span>
-    </div>
-    <div class="card-zones">
-      <div class="zone-seg low"  id="zseg-soil-low"></div>
-      <div class="zone-seg mid"  id="zseg-soil-mid"></div>
-      <div class="zone-seg high" id="zseg-soil-high"></div>
-    </div>
-    <div class="gauge-wrap">
-      <svg class="gauge-svg" viewBox="0 0 160 100">
-        <path class="gauge-track" d="M 18 88 A 62 62 0 0 1 142 88"/>
-        <path class="gauge-arc" id="arc-soil"
-          stroke="#39ff14"
-          stroke-dasharray="0 195"
-          d="M 18 88 A 62 62 0 0 1 142 88"/>
-        <text class="gauge-value" id="val-soil" x="80" y="76" text-anchor="middle">--</text>
-        <text class="gauge-unit"  id="unit-soil" x="80" y="90" text-anchor="middle">%</text>
-        <text class="gauge-min"  x="14"  y="100" text-anchor="middle">0</text>
-        <text class="gauge-max"  x="146" y="100" text-anchor="middle">100</text>
-        <text class="gauge-label-text" x="80" y="100" text-anchor="middle">SUELO</text>
-      </svg>
-    </div>
-    <div class="chart-wrap">
-      <div class="chart-inner"><canvas id="canvas-soil"></canvas></div>
-    </div>
-  </div>
-
-  <!-- AIR QUALITY -->
-  <div class="card" data-sensor="mq" style="--card-color:#7a04eb;">
-    <div class="card-header">
-      <span class="card-title">Calidad Aire</span>
-      <span class="zone-badge" id="badge-mq">--</span>
-      <span class="expand-hint">[ expandir ]</span>
-    </div>
-    <div class="card-zones">
-      <div class="zone-seg low"  id="zseg-mq-low"></div>
-      <div class="zone-seg mid"  id="zseg-mq-mid"></div>
-      <div class="zone-seg high" id="zseg-mq-high"></div>
-    </div>
-    <div class="gauge-wrap">
-      <svg class="gauge-svg" viewBox="0 0 160 100">
-        <path class="gauge-track" d="M 18 88 A 62 62 0 0 1 142 88"/>
-        <path class="gauge-arc" id="arc-mq"
-          stroke="#39ff14"
-          stroke-dasharray="0 195"
-          d="M 18 88 A 62 62 0 0 1 142 88"/>
-        <text class="gauge-value" id="val-mq" x="80" y="76" text-anchor="middle">--</text>
-        <text class="gauge-unit"  id="unit-mq" x="80" y="90" text-anchor="middle">ADC</text>
-        <text class="gauge-min"  x="14"  y="100" text-anchor="middle">0</text>
-        <text class="gauge-max"  x="146" y="100" text-anchor="middle">4095</text>
-        <text class="gauge-label-text" x="80" y="100" text-anchor="middle">MQ-135</text>
-      </svg>
-    </div>
-    <div class="chart-wrap">
-      <div class="chart-inner"><canvas id="canvas-mq"></canvas></div>
-    </div>
-  </div>
-
-</div>
-
-<!-- LOGS PANEL -->
-<div id="logs-panel">
-  <div class="logs-section-title">&#9654; Registros SD</div>
-  <div id="logs-unavailable" style="display:none;">SD no disponible.</div>
-  <div id="logs-ui" style="display:none;">
-    <div class="logs-toolbar">
-      <label for="log-month-select">MES:</label>
-      <select id="log-month-select"></select>
-    </div>
-    <div id="log-file-list"></div>
-    <div id="log-status">Selecciona un archivo para ver su contenido.</div>
-    <div id="log-table-wrap" style="display:none;">
-      <table id="log-table">
-        <thead>
-          <tr>
-            <th>Fecha/Hora</th>
-            <th>Tipo</th>
-            <th>Temp (&deg;C)</th>
-            <th>HR (%)</th>
-            <th>Suelo (%)</th>
-            <th>MQ</th>
-            <th>Detalle</th>
-          </tr>
-        </thead>
-        <tbody id="log-tbody"></tbody>
+      <p style="font-size:.74rem;color:var(--text2);margin:11px 0 5px">mL por litro de maceta, por etapa:</p>
+      <table class="ml-tbl">
+        <tr><td>Plantula</td><td><input type="number" id="ml-pl" min="5" max="200"></td>
+            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'pl '+document.getElementById('ml-pl').value},this)">&#10003;</button></td></tr>
+        <tr><td>Vegetativo</td><td><input type="number" id="ml-veg" min="5" max="300"></td>
+            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'veg '+document.getElementById('ml-veg').value},this)">&#10003;</button></td></tr>
+        <tr><td>Pre-floracion</td><td><input type="number" id="ml-pre" min="5" max="400"></td>
+            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'pre '+document.getElementById('ml-pre').value},this)">&#10003;</button></td></tr>
+        <tr><td>Floracion</td><td><input type="number" id="ml-flo" min="5" max="500"></td>
+            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'flo '+document.getElementById('ml-flo').value},this)">&#10003;</button></td></tr>
+        <tr><td>Final</td><td><input type="number" id="ml-fin" min="5" max="300"></td>
+            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'fin '+document.getElementById('ml-fin').value},this)">&#10003;</button></td></tr>
       </table>
+
+      <p style="font-size:.74rem;color:var(--text2);margin:11px 0 5px">Horas de luz:</p>
+      <div class="cfield">
+        <label>Plantula (h)</label>
+        <div class="srow" style="flex:1;margin:0">
+          <input type="range" min="12" max="20" id="cfg-luz-pl" oninput="document.getElementById('cfg-luz-pl-v').textContent=this.value+'h'">
+          <span id="cfg-luz-pl-v" class="sval">18h</span>
+        </div>
+        <button class="btn btn-o" onclick="sc({cmd:'luz',args:'pl '+document.getElementById('cfg-luz-pl').value},this)">Guardar</button>
+      </div>
+      <div class="cfield">
+        <label>Vegetativo (h)</label>
+        <div class="srow" style="flex:1;margin:0">
+          <input type="range" min="12" max="20" id="cfg-luz-veg" oninput="document.getElementById('cfg-luz-veg-v').textContent=this.value+'h'">
+          <span id="cfg-luz-veg-v" class="sval">18h</span>
+        </div>
+        <button class="btn btn-o" onclick="sc({cmd:'luz',args:'veg '+document.getElementById('cfg-luz-veg').value},this)">Guardar</button>
+      </div>
+      <p style="font-size:.72rem;color:var(--text2)">Pre-floracion / Floracion / Final: 12h &mdash; fijo por etapa</p>
     </div>
-  </div>
-</div>
+  </details>
+
+  <!-- Alertas -->
+  <details class="csec" open>
+    <summary style="border-left-color:#ff8c00">&#9888; Alertas</summary>
+    <div class="cbody">
+      <div class="cfield">
+        <label>Temp maxima (C)</label>
+        <input type="number" id="cfg-tmax" min="20" max="45" value="30">
+      </div>
+      <div class="cfield">
+        <label>Humedad minima (%)</label>
+        <input type="number" id="cfg-hmin" min="10" max="80" value="45">
+      </div>
+      <div class="cfield">
+        <label>Humedad maxima (%)</label>
+        <input type="number" id="cfg-hmax" min="20" max="95" value="60">
+      </div>
+      <div class="cfield">
+        <label>Aire maximo (raw)</label>
+        <input type="number" id="cfg-mq" min="100" max="4095" value="500">
+      </div>
+      <div class="cact">
+        <button class="btn btn-p" onclick="saveAlertas()">&#128190; Guardar alertas</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- Suelo y Bomba -->
+  <details class="csec" open>
+    <summary style="border-left-color:#00e5ff">&#128167; Suelo y Bomba</summary>
+    <div class="cbody">
+      <div id="pump-cal-ind" style="font-size:.8rem;margin-bottom:9px">&#11036; Estado bomba: ---</div>
+      <div class="cfield">
+        <label>Umbral seco (%)</label>
+        <input type="number" id="cfg-smin" min="0" max="50" value="25">
+        <button class="btn btn-o" onclick="sc({cmd:'suelomin',args:document.getElementById('cfg-smin').value},this)">Guardar</button>
+      </div>
+      <div class="cfield">
+        <label>Umbral humedo (%)</label>
+        <input type="number" id="cfg-smax" min="51" max="100" value="70">
+        <button class="btn btn-o" onclick="sc({cmd:'suelomax',args:document.getElementById('cfg-smax').value},this)">Guardar</button>
+      </div>
+      <div class="cfield">
+        <label>ADC seco (0-4095)</label>
+        <input type="number" id="cfg-adry" min="0" max="4095" value="2150">
+      </div>
+      <div class="cfield">
+        <label>ADC humedo (0-4095)</label>
+        <input type="number" id="cfg-awet" min="0" max="4095" value="500">
+      </div>
+      <div class="cact">
+        <button class="btn btn-p" onclick="saveSuelo()">&#128190; Guardar calibracion suelo</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- Sistema -->
+  <details class="csec" open>
+    <summary style="border-left-color:#fe75fe">&#127757; Sistema</summary>
+    <div class="cbody">
+      <p class="cnote">UTC offset en horas. Ej: -3 para UTC-3 (Argentina).</p>
+      <div class="cfield">
+        <label>Zona horaria (h)</label>
+        <input type="number" id="cfg-tz" min="-12" max="14" value="-3">
+        <button class="btn btn-p" onclick="sc({cmd:'timezone',args:document.getElementById('cfg-tz').value},this)">&#128190; Guardar</button>
+      </div>
+    </div>
+  </details>
+
+  <!-- Visualizacion -->
+  <details class="csec" open>
+    <summary style="border-left-color:#7a04eb">&#127912; Visualizacion</summary>
+    <div class="cbody">
+      <p class="cnote">Estos ajustes solo afectan la visualizacion del dashboard en este navegador.</p>
+      <div class="srow">
+        <label>Temp alerta (C)</label>
+        <input type="range" min="20" max="45" id="vt" oninput="visU()">
+        <span class="sval" id="vt-v">32</span>
+      </div>
+      <div class="srow">
+        <label>RH minima (%)</label>
+        <input type="range" min="10" max="80" id="vrl" oninput="visU()">
+        <span class="sval" id="vrl-v">40</span>
+      </div>
+      <div class="srow">
+        <label>RH maxima (%)</label>
+        <input type="range" min="20" max="100" id="vrh" oninput="visU()">
+        <span class="sval" id="vrh-v">70</span>
+      </div>
+      <div class="srow">
+        <label>Suelo min (%)</label>
+        <input type="range" min="0" max="50" id="vsl" oninput="visU()">
+        <span class="sval" id="vsl-v">25</span>
+      </div>
+      <div class="srow">
+        <label>MQ alerta (raw)</label>
+        <input type="range" min="100" max="4095" step="50" id="vm" oninput="visU()">
+        <span class="sval" id="vm-v">500</span>
+      </div>
+      <div class="cact">
+        <button class="btn btn-o" onclick="visReset()">Restaurar defaults</button>
+      </div>
+    </div>
+  </details>
+
+</div><!-- /view-config -->
+
+</main>
 
 <script>
-(function () {
-  'use strict';
+'use strict';
+// ── State
+var ws, tsBase=0, tsAt=0, fanAuto=true, autoIrr=true;
+var logIdx={};
+var VD={tWarn:32,rhL:40,rhH:70,slL:25,mqW:500};
+var V=Object.assign({},VD,JSON.parse(localStorage.getItem('gh_vis')||'{}'));
 
-  // ── Sensor config ─────────────────────────────────────────
-  var SENSORS = {
-    temp: { min: 0,    max: 50,   unit: '°C',  decimals: 1,
-            defT1: 24,  defT2: 30,  label: 'Temperatura' },
-    rh:   { min: 0,    max: 100,  unit: '%',   decimals: 1,
-            defT1: 40,  defT2: 65,  label: 'Humedad Aire' },
-    soil: { min: 0,    max: 100,  unit: '%',   decimals: 0,
-            defT1: 25,  defT2: 60,  label: 'Humedad Suelo' },
-    mq:   { min: 0,    max: 4095, unit: 'ADC', decimals: 0,
-            defT1: 400, defT2: 800, label: 'Calidad Aire' },
-  };
+// ── WebSocket
+function wsConn(){
+  ws=new WebSocket('ws://'+location.host+'/ws');
+  ws.onopen=function(){dot(true)};
+  ws.onclose=function(){dot(false);setTimeout(wsConn,3000)};
+  ws.onerror=function(){ws.close()};
+  ws.onmessage=function(e){onWs(JSON.parse(e.data))};
+}
+function dot(ok){
+  document.getElementById('ws-dot').className=ok?'ok':'';
+}
 
-  var ZONE_COLORS = { low: '#39ff14', mid: '#ff8c00', high: '#ff124f' };
-  var ZONE_LABELS = { low: 'BAJO', mid: 'MEDIO', high: 'ALTO' };
-  var ARC_LENGTH  = 195;
-  var MAX_HISTORY = 90;
-  var WS_RETRY_MS = 3000;
-  var LS_KEY      = 'gh_thresholds';
-
-  // ── Thresholds (loaded from localStorage or defaults) ─────
-  var thresholds = loadThresholds();
-
-  function defaultThresholds() {
-    var t = {};
-    Object.keys(SENSORS).forEach(function (id) {
-      t[id] = { t1: SENSORS[id].defT1, t2: SENSORS[id].defT2 };
-    });
-    return t;
+function onWs(d){
+  if(d.ts){tsBase=d.ts;tsAt=Date.now()}
+  document.getElementById('ip-lbl').textContent=location.hostname;
+  if(d.bot_name){
+    var t=document.getElementById('tg-link');
+    t.href='https://t.me/'+d.bot_name.replace('@','');
+    t.style.display='flex';
   }
+  gauge('temp',d.temp_c,0,50,V.tWarn-6,V.tWarn);
+  gauge('rh',d.rh_pct,0,100,V.rhL,V.rhH);
+  gauge('soil',d.soil_pct,0,100,V.slL,80);
+  gauge('mq',d.mq_raw,0,4095,V.mqW*0.7,V.mqW);
+  alrt('card-temp',d.alert_temp);
+  alrt('card-rh',d.alert_rh);
+  alrt('card-mq',d.alert_mq);
+  fanAuto=d.fan_auto;
+  autoIrr=d.auto_irr;
+  syncCtrl(d);
+}
 
-  function loadThresholds() {
-    try {
-      var raw = localStorage.getItem(LS_KEY);
-      if (raw) {
-        var parsed = JSON.parse(raw);
-        // validate keys
-        var ok = Object.keys(SENSORS).every(function (id) {
-          return parsed[id] &&
-                 typeof parsed[id].t1 === 'number' &&
-                 typeof parsed[id].t2 === 'number';
-        });
-        if (ok) return parsed;
-      }
-    } catch (e) {}
-    return defaultThresholds();
-  }
+function alrt(id,on){
+  document.getElementById(id).classList.toggle('card--alert',!!on);
+}
 
-  function saveThresholds() {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(thresholds)); } catch (e) {}
-  }
+// ── Gauges
+var ARC=172.8;
+function gauge(id,val,mn,mx,wL,wH){
+  var arc=document.getElementById('arc-'+id);
+  var txt=document.getElementById('txt-'+id);
+  if(val==null||val===undefined){txt.textContent='--';return}
+  var p=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
+  arc.style.strokeDashoffset=ARC*(1-p);
+  txt.textContent=(val%1!==0)?val.toFixed(1):val;
+  arc.style.stroke=(val>=wH)?'#ff124f':(val>=wL)?'#ff8c00':'#39ff14';
+}
 
-  // ── Color helpers ─────────────────────────────────────────
-  function hexToRgb(hex) {
-    var r = parseInt(hex.slice(1,3),16);
-    var g = parseInt(hex.slice(3,5),16);
-    var b = parseInt(hex.slice(5,7),16);
-    return [r,g,b];
-  }
+// ── Clock
+setInterval(function(){
+  if(!tsBase)return;
+  var n=new Date((tsBase+Math.floor((Date.now()-tsAt)/1000))*1000);
+  var hh=('0'+n.getHours()).slice(-2);
+  var mm=('0'+n.getMinutes()).slice(-2);
+  var ss=('0'+n.getSeconds()).slice(-2);
+  document.getElementById('clock').textContent=hh+':'+mm+':'+ss;
+},1000);
 
-  function lerpColor(hex1, hex2, t) {
-    var a = hexToRgb(hex1), b = hexToRgb(hex2);
-    var r = Math.round(a[0] + (b[0]-a[0])*t);
-    var g = Math.round(a[1] + (b[1]-a[1])*t);
-    var bv= Math.round(a[2] + (b[2]-a[2])*t);
-    return '#' + [r,g,bv].map(function(x){ return x.toString(16).padStart(2,'0'); }).join('');
-  }
-
-  // Returns { color: '#rrggbb', zone: 'low'|'mid'|'high' }
-  function getZone(id, value) {
-    var t  = thresholds[id];
-    var t1 = Math.min(t.t1, t.t2);
-    var t2 = Math.max(t.t1, t.t2);
-    if (t1 === t2) t2 = t1 + 0.001;
-
-    if (value <= t1) {
-      return { color: ZONE_COLORS.low, zone: 'low' };
-    }
-    if (value >= t2) {
-      return { color: ZONE_COLORS.high, zone: 'high' };
-    }
-    // interpolate through mid
-    var ratio = (value - t1) / (t2 - t1);
-    var col;
-    if (ratio < 0.5) {
-      col = lerpColor(ZONE_COLORS.low, ZONE_COLORS.mid, ratio * 2);
-    } else {
-      col = lerpColor(ZONE_COLORS.mid, ZONE_COLORS.high, (ratio - 0.5) * 2);
-    }
-    return { color: col, zone: 'mid' };
-  }
-
-  // ── Gauge update ──────────────────────────────────────────
-  function updateGauge(id, value, valid) {
-    var cfg   = SENSORS[id];
-    var arcEl = document.getElementById('arc-' + id);
-    var valEl = document.getElementById('val-' + id);
-    var badge = document.getElementById('badge-' + id);
-
-    // reset zone segments
-    ['low','mid','high'].forEach(function(z) {
-      var el = document.getElementById('zseg-' + id + '-' + z);
-      if (el) el.classList.remove('active');
-    });
-
-    if (!valid || value === null || value === undefined) {
-      arcEl.setAttribute('stroke-dasharray', '0 ' + ARC_LENGTH);
-      arcEl.style.stroke  = '#7a04eb44';
-      arcEl.style.filter  = 'none';
-      valEl.textContent   = '--';
-      badge.textContent   = '--';
-      badge.style.color   = 'var(--text-dim)';
-      return;
-    }
-
-    var zoneInfo = getZone(id, value);
-    var col      = zoneInfo.color;
-    var ratio    = Math.max(0, Math.min(1, (value - cfg.min) / (cfg.max - cfg.min)));
-    var dash     = (ratio * ARC_LENGTH).toFixed(2);
-
-    arcEl.setAttribute('stroke-dasharray', dash + ' ' + (ARC_LENGTH - dash).toFixed(2));
-    arcEl.style.stroke = col;
-    arcEl.style.filter = 'drop-shadow(0 0 6px ' + col + '88)';
-    valEl.textContent  = value.toFixed(cfg.decimals);
-    valEl.setAttribute('fill', col);
-
-    badge.textContent   = ZONE_LABELS[zoneInfo.zone];
-    badge.style.color   = col;
-
-    var activeSegEl = document.getElementById('zseg-' + id + '-' + zoneInfo.zone);
-    if (activeSegEl) activeSegEl.classList.add('active');
-  }
-
-  // ── History + Chart.js ────────────────────────────────────
-  var history = { temp: [], rh: [], soil: [], mq: [] };
-  var charts  = {};
-
-  function pushHistory(id, value, valid) {
-    if (!valid || value === null || value === undefined) return;
-    var buf = history[id];
-    buf.push({ x: Date.now(), y: value });
-    if (buf.length > MAX_HISTORY) buf.shift();
-    if (charts[id]) charts[id].update('none');
-  }
-
-  function initChart(id) {
-    if (charts[id]) return;
-    var cfg    = SENSORS[id];
-    var canvas = document.getElementById('canvas-' + id);
-
-    // Use current threshold color for the chart line
-    var col = thresholds[id]
-      ? ZONE_COLORS.mid
-      : '#7a04eb';
-
-    charts[id] = new Chart(canvas, {
-      type: 'line',
-      data: {
-        datasets: [{
-          data: history[id],
-          borderColor: col,
-          backgroundColor: col + '22',
-          borderWidth: 2,
-          pointRadius: 0,
-          fill: true,
-          tension: 0.35,
-        }]
-      },
-      options: {
-        animation: false,
-        responsive: true,
-        maintainAspectRatio: false,
-        parsing: false,
-        interaction: { mode: 'nearest', axis: 'x', intersect: false },
-        scales: {
-          x: {
-            type: 'time',
-            time: { unit: 'second', displayFormats: { second: 'HH:mm:ss' } },
-            ticks: { color: '#7a04ebaa', maxTicksLimit: 5,
-                     font: { family: 'Courier New', size: 10 } },
-            grid: { color: '#7a04eb22' },
-          },
-          y: {
-            min: cfg.min, max: cfg.max,
-            ticks: { color: '#7a04ebaa', font: { family: 'Courier New', size: 10 } },
-            grid: { color: '#7a04eb22' },
-          },
-        },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            backgroundColor: '#120458ee',
-            borderColor: col, borderWidth: 1,
-            titleColor: col, bodyColor: '#fe75fe',
-            titleFont: { family: 'Courier New' },
-            bodyFont:  { family: 'Courier New' },
-            callbacks: {
-              label: function(ctx) {
-                return ctx.parsed.y.toFixed(cfg.decimals) + ' ' + cfg.unit;
-              },
-            },
-          },
-        },
-      },
-    });
-  }
-
-  // ── Card expand/collapse ──────────────────────────────────
-  document.querySelectorAll('.card').forEach(function (card) {
-    card.addEventListener('click', function () {
-      var id          = card.dataset.sensor;
-      var wasExpanded = card.classList.contains('expanded');
-
-      document.querySelectorAll('.card.expanded').forEach(function (c) {
-        c.classList.remove('expanded');
-        c.querySelector('.expand-hint').textContent = '[ expandir ]';
-      });
-
-      if (!wasExpanded) {
-        card.classList.add('expanded');
-        card.querySelector('.expand-hint').textContent = '[ colapsar ]';
-        initChart(id);
-        if (charts[id]) charts[id].update('none');
-      }
-    });
+// ── Tabs
+function showTab(name){
+  ['dashboard','logs','config'].forEach(function(t){
+    document.getElementById('view-'+t).hidden=(t!==name);
   });
-
-  // ── Settings panel build ──────────────────────────────────
-  var settingsGrid = document.getElementById('settings-grid');
-
-  Object.keys(SENSORS).forEach(function (id) {
-    var cfg = SENSORS[id];
-    var t   = thresholds[id];
-
-    var block = document.createElement('div');
-    block.className = 'sensor-thresholds';
-    block.innerHTML =
-      '<h3 style="color:var(--text-main);">' + cfg.label + '</h3>' +
-
-      // threshold 1
-      '<div class="threshold-row">' +
-        '<span class="zone-dot low"></span>' +
-        '<label>Bajo &rarr; Medio</label>' +
-        '<input type="range" id="t1-' + id + '"' +
-          ' min="' + cfg.min + '" max="' + cfg.max + '"' +
-          ' step="' + (cfg.decimals > 0 ? '0.5' : '1') + '"' +
-          ' value="' + t.t1 + '">' +
-        '<span class="threshold-val" id="t1v-' + id + '">' +
-          t.t1 + cfg.unit + '</span>' +
-      '</div>' +
-
-      // threshold 2
-      '<div class="threshold-row">' +
-        '<span class="zone-dot high"></span>' +
-        '<label>Medio &rarr; Alto</label>' +
-        '<input type="range" id="t2-' + id + '"' +
-          ' min="' + cfg.min + '" max="' + cfg.max + '"' +
-          ' step="' + (cfg.decimals > 0 ? '0.5' : '1') + '"' +
-          ' value="' + t.t2 + '">' +
-        '<span class="threshold-val" id="t2v-' + id + '">' +
-          t.t2 + cfg.unit + '</span>' +
-      '</div>' +
-
-      '<div class="color-strip"></div>';
-
-    settingsGrid.appendChild(block);
-
-    // Slider events
-    function onSliderChange() {
-      var v1 = parseFloat(document.getElementById('t1-' + id).value);
-      var v2 = parseFloat(document.getElementById('t2-' + id).value);
-      document.getElementById('t1v-' + id).textContent = v1 + cfg.unit;
-      document.getElementById('t2v-' + id).textContent = v2 + cfg.unit;
-      thresholds[id].t1 = v1;
-      thresholds[id].t2 = v2;
-      saveThresholds();
-      // Re-render current gauge with new thresholds (use last cached value)
-      var val = lastValues[id];
-      if (val !== null && val !== undefined) {
-        updateGauge(id, val, true);
-      }
-    }
-
-    document.getElementById('t1-' + id).addEventListener('input', onSliderChange);
-    document.getElementById('t2-' + id).addEventListener('input', onSliderChange);
+  document.querySelectorAll('.tab-btn').forEach(function(b){
+    b.classList.toggle('active',b.dataset.tab===name);
   });
+  if(name==='config')loadConfig();
+  if(name==='logs')initLogs();
+}
 
-  // ── Reset button ──────────────────────────────────────────
-  document.getElementById('btn-reset-all').addEventListener('click', function () {
-    thresholds = defaultThresholds();
-    saveThresholds();
-    // update sliders UI
-    Object.keys(SENSORS).forEach(function (id) {
-      var cfg = SENSORS[id];
-      var t   = thresholds[id];
-      document.getElementById('t1-' + id).value  = t.t1;
-      document.getElementById('t2-' + id).value  = t.t2;
-      document.getElementById('t1v-' + id).textContent = t.t1 + cfg.unit;
-      document.getElementById('t2v-' + id).textContent = t.t2 + cfg.unit;
-      var val = lastValues[id];
-      if (val !== null && val !== undefined) updateGauge(id, val, true);
-    });
-  });
+// ── Send command
+function sc(obj,btn){
+  if(!ws||ws.readyState!==1){if(btn)flash(btn,false);return}
+  ws.send(JSON.stringify(obj));
+  if(btn)flash(btn,true);
+}
+function flash(b,ok){
+  b.classList.add(ok?'fok':'ferr');
+  setTimeout(function(){b.classList.remove('fok','ferr')},1000);
+}
 
-  // ── Settings gear toggle ──────────────────────────────────
-  var btnSettings   = document.getElementById('btn-settings');
-  var settingsPanel = document.getElementById('settings-panel');
-
-  btnSettings.addEventListener('click', function () {
-    var open = settingsPanel.classList.toggle('open');
-    btnSettings.classList.toggle('active', open);
-  });
-
-  // ── WebSocket ─────────────────────────────────────────────
-  var dot       = document.getElementById('ws-dot');
-  var ws, retryTimer;
-  var lastValues = { temp: null, rh: null, soil: null, mq: null };
-
-  function connect() {
-    ws = new WebSocket('ws://' + location.hostname + '/ws');
-
-    ws.onopen = function () {
-      dot.className = 'connected';
-      clearTimeout(retryTimer);
-    };
-
-    ws.onmessage = function (evt) {
-      var d;
-      try { d = JSON.parse(evt.data); } catch (e) { return; }
-      var valid = d.temp_valid === true;
-
-      var readings = {
-        temp: valid ? d.temp_c   : null,
-        rh:   valid ? d.rh_pct   : null,
-        soil: d.soil_pct,
-        mq:   d.mq_raw,
-      };
-      var valids = { temp: valid, rh: valid, soil: true, mq: true };
-
-      Object.keys(readings).forEach(function (id) {
-        lastValues[id] = readings[id];
-        updateGauge(id, readings[id], valids[id]);
-        pushHistory(id, readings[id], valids[id]);
-      });
-    };
-
-    ws.onclose = ws.onerror = function () {
-      dot.className = 'disconnected';
-      retryTimer = setTimeout(connect, WS_RETRY_MS);
-    };
+// ── Sync controls
+function syncCtrl(d){
+  var lb=document.getElementById('led-badge');
+  if(d.led_manual){lb.className='badge b-on';lb.textContent='MANUAL ON'}
+  else if(d.light_on){lb.className='badge b-on';lb.textContent='AUTO ON'}
+  else{lb.className='badge b-off';lb.textContent='OFF'}
+  if(d.led_pct!=null){
+    document.getElementById('led-sl').value=d.led_pct;
+    document.getElementById('led-sv').textContent=d.led_pct+'%';
+    document.getElementById('cfg-led').value=d.led_pct;
+    document.getElementById('cfg-led-v').textContent=d.led_pct+'%';
   }
+  var fb=document.getElementById('fan-badge');
+  fb.className='badge '+(d.fan_auto?'b-auto':'b-manual');
+  fb.textContent=d.fan_auto?'AUTO':'MANUAL';
+  document.getElementById('fan-auto-btn').textContent='Auto: '+(d.fan_auto?'ON':'OFF');
+  if(d.fan_pct!=null){
+    document.getElementById('fan-sl').value=d.fan_pct;
+    document.getElementById('fan-sv').textContent=d.fan_pct+'%';
+  }
+  var ib=document.getElementById('irr-badge');
+  ib.className='badge '+(d.auto_irr?'b-auto':'b-off');
+  ib.textContent=d.auto_irr?'AUTO ON':'AUTO OFF';
+  document.getElementById('tank').textContent=d.tank_ok?'\uD83D\uDFE2 Tanque: OK':'\uD83D\uDD34 Sin agua';
+  if(d.pump_calibrated!==undefined){
+    var ps=document.getElementById('pump-st');
+    ps.textContent=d.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
+  }
+}
 
-  document.getElementById('ip-label').textContent = location.hostname;
-  connect();
+function toggleFanAuto(btn){
+  sc({cmd:'ventauto',args:fanAuto?'off':'on'},btn);
+}
+function toggleAutoIrr(btn){
+  sc({cmd:'autoriego',args:autoIrr?'off':'on'},btn);
+}
+function calPump(btn){
+  if(!confirm('Iniciar calibracion de bomba 5 segundos?'))return;
+  sc({cmd:'calibrar',args:''},btn);
+}
 
-  // ── SD Log Viewer ──────────────────────────────────────────
-  var logIndex    = {};
-  var currentPath = null;
+// ── Camera
+function camConnect(){
+  var u=document.getElementById('cam-url').value.trim();
+  if(!u)return;
+  localStorage.setItem('gh_cam_url',u);
+  var img=document.getElementById('cam-feed');
+  img.src=u;img.style.display='block';
+  document.getElementById('cam-ph').style.display='none';
+}
+function camDisconnect(){
+  document.getElementById('cam-feed').src='';
+  document.getElementById('cam-feed').style.display='none';
+  document.getElementById('cam-ph').style.display='flex';
+}
+function camErr(){
+  document.getElementById('cam-ph').style.display='flex';
+}
 
-  var elLogsUI    = document.getElementById('logs-ui');
-  var elLogsNA    = document.getElementById('logs-unavailable');
-  var elMonthSel  = document.getElementById('log-month-select');
-  var elFileList  = document.getElementById('log-file-list');
-  var elStatus    = document.getElementById('log-status');
-  var elTableWrap = document.getElementById('log-table-wrap');
-  var elTbody     = document.getElementById('log-tbody');
+// ── Events
+var EVI={RIEGO:'&#128167;',LUZ_ON:'&#128161;',LUZ_OFF:'&#127761;',ALERTA_ON:'&#9888;&#65039;',ALERTA_OFF:'&#9989;'};
+function loadEvents(){
+  fetch('/api/logs').then(function(r){return r.json()}).then(function(idx){
+    var months=Object.keys(idx);
+    if(!months.length)return Promise.reject('no months');
+    var files=idx[months[months.length-1]];
+    if(!files||!files.length)return Promise.reject('no files');
+    return fetch('/api/logfile?path='+encodeURIComponent(files[files.length-1]));
+  }).then(function(r){return r.text()}).then(function(csv){
+    var rows=csv.split('\n').filter(function(l){return /RIEGO|LUZ_ON|LUZ_OFF|ALERTA_ON|ALERTA_OFF/.test(l)}).slice(-6);
+    var ul=document.getElementById('ev-list');
+    ul.innerHTML='';
+    if(!rows.length){ul.innerHTML='<li style="color:var(--text2);font-size:.76rem">Sin eventos recientes</li>';return}
+    rows.forEach(function(row){
+      var p=row.split(',');
+      var tp=(p[1]||'').trim().toUpperCase();
+      var tm=(p[0]||'').split(' ')[1]||(p[0]||'');
+      var dt=p.slice(2).join(',').trim().substring(0,35);
+      var ic=EVI[tp]||'&bull;';
+      var li=document.createElement('li');
+      li.className='ev-row';
+      li.innerHTML='<span>'+ic+'</span><span class="ev-badge ev-'+tp+'">'+tp+'</span><span class="ev-time">'+tm+'</span><span class="ev-detail">'+dt+'</span>';
+      ul.appendChild(li);
+    });
+  }).catch(function(){
+    document.getElementById('ev-list').innerHTML='<li style="color:var(--text2);font-size:.76rem">Sin datos de SD</li>';
+  });
+}
 
-  function logsInit() {
-    fetch('/api/logs')
-      .then(function(r) {
-        if (!r.ok) throw new Error('SD no disponible');
-        return r.json();
-      })
-      .then(function(data) {
-        logIndex = data.files || {};
-        var months = data.months || [];
-        if (months.length === 0) {
-          elStatus.textContent = 'Sin registros todavia.';
-          elLogsUI.style.display = 'block';
-          return;
+// ── Logs tab
+function initLogs(){
+  fetch('/api/logs').then(function(r){return r.json()}).then(function(idx){
+    logIdx=idx;
+    var sel=document.getElementById('log-month');
+    sel.innerHTML='<option>-- Mes --</option>';
+    Object.keys(idx).forEach(function(m){
+      var o=document.createElement('option');o.value=m;o.textContent=m;sel.appendChild(o);
+    });
+  }).catch(function(){});
+}
+function loadMonth(){
+  var m=document.getElementById('log-month').value;
+  var files=logIdx[m]||[];
+  var sel=document.getElementById('log-file');
+  sel.innerHTML='<option>-- Archivo --</option>';
+  files.forEach(function(f){
+    var o=document.createElement('option');o.value=f;o.textContent=f.split('/').pop();sel.appendChild(o);
+  });
+}
+function loadLogFile(){
+  var path=document.getElementById('log-file').value;
+  if(!path||path.startsWith('--'))return;
+  var dl=document.getElementById('log-dl');
+  dl.href='/api/logfile?path='+encodeURIComponent(path)+'&dl=1';
+  dl.hidden=false;
+  fetch('/api/logfile?path='+encodeURIComponent(path)).then(function(r){return r.text()}).then(function(csv){
+    var lines=csv.split('\n').filter(function(l){return l.trim()});
+    if(!lines.length){document.getElementById('log-wrap').innerHTML='<p style="color:var(--text2)">Archivo vacio.</p>';return}
+    var hdr=lines[0].split(',');
+    var html='<table><thead><tr>'+hdr.map(function(h){return'<th>'+h.trim()+'</th>'}).join('')+'</tr></thead><tbody>';
+    lines.slice(1).forEach(function(row){
+      var cells=row.split(',');
+      var tp=(cells[1]||'').trim().toUpperCase();
+      html+='<tr>'+cells.map(function(c,i){
+        return i===1?'<td class="lt-'+tp+'">'+c.trim()+'</td>':'<td>'+c.trim()+'</td>';
+      }).join('')+'</tr>';
+    });
+    html+='</tbody></table>';
+    document.getElementById('log-wrap').innerHTML=html;
+  }).catch(function(){});
+}
+
+// ── Config
+function loadConfig(){
+  fetch('/api/config').then(function(r){return r.json()}).then(function(c){
+    sv('cfg-stage',c.stage);
+    sv('cfg-pot',c.pot_l);sv('cfg-pause',c.pause_days);
+    sv('cfg-led',c.led_pct);document.getElementById('cfg-led-v').textContent=c.led_pct+'%';
+    sv('ml-pl',c.ml_pl);sv('ml-veg',c.ml_veg);sv('ml-pre',c.ml_pre);sv('ml-flo',c.ml_flo);sv('ml-fin',c.ml_fin);
+    sv('cfg-luz-pl',c.luz_pl);document.getElementById('cfg-luz-pl-v').textContent=c.luz_pl+'h';
+    sv('cfg-luz-veg',c.luz_veg);document.getElementById('cfg-luz-veg-v').textContent=c.luz_veg+'h';
+    sv('cfg-tmax',c.temp_max);sv('cfg-hmin',c.hum_min);sv('cfg-hmax',c.hum_max);sv('cfg-mq',c.mq_max);
+    sv('cfg-smin',c.soil_min_pct);sv('cfg-smax',c.soil_max_pct);
+    sv('cfg-adry',c.soil_dry_adc);sv('cfg-awet',c.soil_wet_adc);
+    sv('cfg-tz',c.tz_offset);
+    var pi=document.getElementById('pump-cal-ind');
+    pi.textContent=c.pump_calibrated?'\u2705 Bomba calibrada':'\u26A0\uFE0F Sin calibrar';
+    document.getElementById('pump-st').textContent=c.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
+    if(c.bot_name){
+      sv('tg-name',c.bot_name);
+      var pl=document.getElementById('tg-prev-lnk');
+      pl.href='https://t.me/'+c.bot_name.replace('@','');
+      pl.textContent='t.me/'+c.bot_name.replace('@','');
+      document.getElementById('tg-prev').style.display='block';
+    }
+  }).catch(function(){});
+}
+function sv(id,val){var e=document.getElementById(id);if(e&&val!=null)e.value=val}
+
+function saveAlertas(){
+  sc({cmd:'tempmax',args:document.getElementById('cfg-tmax').value});
+  sc({cmd:'hummin', args:document.getElementById('cfg-hmin').value});
+  sc({cmd:'hummax', args:document.getElementById('cfg-hmax').value});
+  sc({cmd:'airemax',args:document.getElementById('cfg-mq').value});
+}
+function saveSuelo(){
+  sc({cmd:'calsuelo',args:document.getElementById('cfg-adry').value+' '+document.getElementById('cfg-awet').value});
+}
+function saveTelegram(){
+  var tok=document.getElementById('tg-tok').value.trim();
+  var nm=document.getElementById('tg-name').value.trim();
+  if(!tok&&!nm)return;
+  var body={};if(tok)body.token=tok;if(nm)body.name=nm;
+  fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json()}).then(function(res){
+      if(res.ok){
+        if(nm){
+          var pl=document.getElementById('tg-prev-lnk');
+          pl.href='https://t.me/'+nm.replace('@','');pl.textContent='t.me/'+nm.replace('@','');
+          document.getElementById('tg-prev').style.display='block';
+          var tl=document.getElementById('tg-link');tl.href=pl.href;tl.style.display='flex';
         }
-        months.forEach(function(m) {
-          var opt = document.createElement('option');
-          opt.value = m;
-          opt.textContent = m;
-          elMonthSel.appendChild(opt);
-        });
-        elLogsUI.style.display = 'block';
-        renderFileList(months[months.length - 1]);
-        elMonthSel.value = months[months.length - 1];
-      })
-      .catch(function() {
-        elLogsNA.style.display = 'block';
-      });
-  }
+        alert('Telegram guardado.');
+      }
+    }).catch(function(){alert('Error al guardar Telegram.')});
+}
+function togglePwd(id,btn){
+  var i=document.getElementById(id);
+  i.type=i.type==='password'?'text':'password';
+  btn.textContent=i.type==='password'?'\u{1F441}':'\uD83D\uDE48';
+}
 
-  function renderFileList(month) {
-    elFileList.innerHTML = '';
-    elTableWrap.style.display = 'none';
-    elTbody.innerHTML = '';
-    elStatus.textContent = 'Selecciona un archivo para ver su contenido.';
-    var files = logIndex[month] || [];
-    if (files.length === 0) {
-      elStatus.textContent = 'Sin archivos para este mes.';
-      return;
-    }
-    files.forEach(function(fname) {
-      var btn = document.createElement('button');
-      btn.className = 'log-file-btn';
-      btn.textContent = fname;
-      btn.addEventListener('click', function() {
-        document.querySelectorAll('.log-file-btn').forEach(function(b) {
-          b.classList.remove('active');
-        });
-        btn.classList.add('active');
-        loadLogFile('/logs/' + month + '/' + fname);
-      });
-      elFileList.appendChild(btn);
-    });
-  }
+// ── Visualization
+function visU(){
+  V.tWarn=+document.getElementById('vt').value;
+  V.rhL=+document.getElementById('vrl').value;
+  V.rhH=+document.getElementById('vrh').value;
+  V.slL=+document.getElementById('vsl').value;
+  V.mqW=+document.getElementById('vm').value;
+  document.getElementById('vt-v').textContent=V.tWarn;
+  document.getElementById('vrl-v').textContent=V.rhL;
+  document.getElementById('vrh-v').textContent=V.rhH;
+  document.getElementById('vsl-v').textContent=V.slL;
+  document.getElementById('vm-v').textContent=V.mqW;
+  localStorage.setItem('gh_vis',JSON.stringify(V));
+}
+function visReset(){
+  V=Object.assign({},VD);
+  localStorage.setItem('gh_vis',JSON.stringify(V));
+  applyVis();
+}
+function applyVis(){
+  sv('vt',V.tWarn);document.getElementById('vt-v').textContent=V.tWarn;
+  sv('vrl',V.rhL);document.getElementById('vrl-v').textContent=V.rhL;
+  sv('vrh',V.rhH);document.getElementById('vrh-v').textContent=V.rhH;
+  sv('vsl',V.slL);document.getElementById('vsl-v').textContent=V.slL;
+  sv('vm',V.mqW);document.getElementById('vm-v').textContent=V.mqW;
+}
 
-  function loadLogFile(path) {
-    currentPath = path;
-    elStatus.textContent = 'Cargando...';
-    elTableWrap.style.display = 'none';
-    elTbody.innerHTML = '';
-
-    fetch('/api/logfile?path=' + encodeURIComponent(path))
-      .then(function(r) {
-        if (!r.ok) throw new Error('No se pudo leer el archivo');
-        return r.text();
-      })
-      .then(function(csv) {
-        var lines = csv.split('\n').filter(function(l) { return l.trim().length > 0; });
-        var rows = lines.slice(1); // saltar cabecera
-        if (rows.length === 0) {
-          elStatus.textContent = 'Archivo sin registros.';
-          return;
-        }
-        rows.forEach(function(line) {
-          var c = line.split(',');
-          var tipo = (c[1] || '').trim();
-          var tr = document.createElement('tr');
-          tr.innerHTML =
-            '<td>' + (c[0] || '') + '</td>' +
-            '<td class="lt-' + tipo + '">' + tipo + '</td>' +
-            '<td>' + (c[2] || '') + '</td>' +
-            '<td>' + (c[3] || '') + '</td>' +
-            '<td>' + (c[4] || '') + '</td>' +
-            '<td>' + (c[5] || '') + '</td>' +
-            '<td>' + (c.slice(6).join(',').replace(/^"|"$/g,'') || '') + '</td>';
-          elTbody.appendChild(tr);
-        });
-        var dlUrl = '/api/logfile?path=' + encodeURIComponent(path) + '&dl=1';
-        elStatus.innerHTML = rows.length + ' registros &nbsp;|&nbsp; ' +
-          '<a href="' + dlUrl + '" style="color:var(--c4);text-decoration:none;" download>' +
-          '&#8681; Descargar CSV</a>';
-        elTableWrap.style.display = 'block';
-      })
-      .catch(function(err) {
-        elStatus.textContent = 'Error: ' + err.message;
-      });
-  }
-
-  elMonthSel.addEventListener('change', function() {
-    renderFileList(elMonthSel.value);
-  });
-
-  logsInit();
-
+// ── Init
+(function(){
+  var cu=localStorage.getItem('gh_cam_url');
+  if(cu){document.getElementById('cam-url').value=cu;camConnect()}
+  applyVis();
+  wsConn();
+  loadEvents();
 }());
 </script>
 </body>
