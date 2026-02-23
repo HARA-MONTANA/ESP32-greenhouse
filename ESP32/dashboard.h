@@ -141,21 +141,33 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 .csec[open] summary{border-bottom:1px solid var(--border)}
 .cbody{background:var(--bg2);padding:14px}
 .cfield{display:grid;grid-template-columns:150px 1fr auto;gap:7px;align-items:center;margin-bottom:9px}
-.cfield label{font-size:.76rem;color:var(--text2)}
+.cfield label{font-size:.76rem;color:var(--text2)}.cfield-note{font-size:.68rem;color:var(--text2);opacity:.65;font-style:italic;display:block;margin-top:1px}
 @media(max-width:580px){.cfield{grid-template-columns:1fr}}
 .cnote{font-size:.72rem;color:var(--text2);margin-bottom:9px;line-height:1.5}
 .cact{margin-top:11px;display:flex;gap:7px;flex-wrap:wrap}
 .ml-tbl{width:100%;border-collapse:collapse;font-size:.76rem;margin:7px 0}
 .ml-tbl td{padding:4px;border-bottom:1px solid var(--border)}
 .ml-tbl td:first-child{color:var(--text2);width:110px}
-.ml-tbl td:last-child{width:44px}
-.ml-tbl input{width:80px}
 .pwd-wrap{position:relative;display:flex}
 .pwd-wrap input{flex:1;padding-right:34px}
 .eye{position:absolute;right:7px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text2);cursor:pointer;font-size:.8rem}
 .srow{display:flex;align-items:center;gap:9px;margin-bottom:7px}
 .srow label{width:130px;font-size:.76rem;color:var(--text2);flex-shrink:0}
 .srow input[type=range]{flex:1}
+/* ── Config enhancements */
+.csec-meta{margin-left:auto;display:flex;gap:6px;align-items:center}
+.csec-tag{font-size:.68rem;font-weight:600;padding:2px 8px;border-radius:10px;
+  background:rgba(122,4,235,.15);color:var(--c2);border:1px solid var(--border);letter-spacing:.04em}
+.csec-hint{font-size:.72rem;color:var(--text2);font-weight:400}
+.cfg-ro{background:var(--bg);border:1px solid var(--border);color:var(--text2);
+  padding:5px 9px;border-radius:5px;font-size:.76rem;font-family:inherit;width:100%;cursor:default}
+.cfg-ro.unlocked{color:var(--text);background:var(--bg3);cursor:text}
+.cfg-unlock{font-size:.7rem;color:var(--text2);background:transparent;
+  border:1px solid var(--border);border-radius:5px;padding:4px 10px;cursor:pointer;
+  font-family:inherit;white-space:nowrap;transition:all .15s}
+.cfg-unlock:hover{color:var(--c2);border-color:var(--c2)}
+.cfg-divider{border:none;border-top:1px solid var(--border);margin:13px 0 10px}
+.ml-tbl input{width:100%}
 </style>
 </head>
 <body>
@@ -373,11 +385,14 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 <!-- ===== CONFIG ===== -->
 <div id="view-config" hidden>
 
-  <!-- Telegram -->
-  <details class="csec" open>
-    <summary style="border-left-color:#00acee">&#129302; Telegram</summary>
+  <!-- Telegram (cerrado por defecto - configuracion inicial) -->
+  <details class="csec">
+    <summary style="border-left-color:#00acee">
+      &#129302; Telegram
+      <span class="csec-meta"><span class="csec-hint">Notificaciones y control remoto</span></span>
+    </summary>
     <div class="cbody">
-      <p class="cnote">El token no se muestra por seguridad. Ingresa uno nuevo para cambiarlo.</p>
+      <p class="cnote">El token no se muestra por seguridad. Ingresa uno nuevo solo si necesitas cambiarlo.</p>
       <div class="cfield">
         <label>Token del bot</label>
         <div class="pwd-wrap">
@@ -400,11 +415,14 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 
   <!-- Planta -->
   <details class="csec" open>
-    <summary style="border-left-color:#39ff14">&#127807; Planta</summary>
+    <summary style="border-left-color:#39ff14">
+      &#127807; Planta
+      <span class="csec-meta"><span id="cfg-stage-tag" class="csec-tag">---</span></span>
+    </summary>
     <div class="cbody">
       <div class="cfield">
-        <label>Etapa actual</label>
-        <select id="cfg-stage" onchange="sc({cmd:'etapa',args:this.value})">
+        <label>Etapa</label>
+        <select id="cfg-stage" onchange="sc({cmd:'etapa',args:this.value});updateStageTag(this.value)">
           <option value="pl">Plantula</option>
           <option value="veg">Vegetativo</option>
           <option value="pre">Pre-floracion</option>
@@ -415,12 +433,10 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
       <div class="cfield">
         <label>Maceta (L)</label>
         <input type="number" id="cfg-pot" min="1" max="50" value="5">
-        <button class="btn btn-o" onclick="sc({cmd:'maceta',args:document.getElementById('cfg-pot').value},this)">Guardar</button>
       </div>
       <div class="cfield">
         <label>Dias entre riegos</label>
         <input type="number" id="cfg-pause" min="1" max="5" value="2">
-        <button class="btn btn-o" onclick="sc({cmd:'pausariego',args:document.getElementById('cfg-pause').value},this)">Guardar</button>
       </div>
       <div class="cfield">
         <label>Intensidad LED (%)</label>
@@ -428,41 +444,33 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
           <input type="range" min="1" max="100" id="cfg-led" oninput="document.getElementById('cfg-led-v').textContent=this.value+'%'">
           <span id="cfg-led-v" class="sval">80%</span>
         </div>
-        <button class="btn btn-o" onclick="sc({cmd:'led',args:document.getElementById('cfg-led').value},this)">Guardar</button>
       </div>
-
-      <p style="font-size:.74rem;color:var(--text2);margin:11px 0 5px">mL por litro de maceta, por etapa:</p>
+      <hr class="cfg-divider">
+      <p style="font-size:.74rem;color:var(--text2);margin-bottom:7px">&#128167; mL por litro de maceta, por etapa:</p>
       <table class="ml-tbl">
-        <tr><td>Plantula</td><td><input type="number" id="ml-pl" min="5" max="200"></td>
-            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'pl '+document.getElementById('ml-pl').value},this)">&#10003;</button></td></tr>
-        <tr><td>Vegetativo</td><td><input type="number" id="ml-veg" min="5" max="300"></td>
-            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'veg '+document.getElementById('ml-veg').value},this)">&#10003;</button></td></tr>
-        <tr><td>Pre-floracion</td><td><input type="number" id="ml-pre" min="5" max="400"></td>
-            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'pre '+document.getElementById('ml-pre').value},this)">&#10003;</button></td></tr>
-        <tr><td>Floracion</td><td><input type="number" id="ml-flo" min="5" max="500"></td>
-            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'flo '+document.getElementById('ml-flo').value},this)">&#10003;</button></td></tr>
-        <tr><td>Final</td><td><input type="number" id="ml-fin" min="5" max="300"></td>
-            <td><button class="btn btn-o" onclick="sc({cmd:'ml',args:'fin '+document.getElementById('ml-fin').value},this)">&#10003;</button></td></tr>
+        <tr><td>Plantula</td><td><input type="number" id="ml-pl" min="5" max="200"></td></tr>
+        <tr><td>Vegetativo</td><td><input type="number" id="ml-veg" min="5" max="300"></td></tr>
+        <tr><td>Pre-floracion</td><td><input type="number" id="ml-pre" min="5" max="400"></td></tr>
+        <tr><td>Floracion</td><td><input type="number" id="ml-flo" min="5" max="500"></td></tr>
+        <tr><td>Final</td><td><input type="number" id="ml-fin" min="5" max="300"></td></tr>
       </table>
-
-      <p style="font-size:.74rem;color:var(--text2);margin:11px 0 5px">Horas de luz:</p>
+      <hr class="cfg-divider">
+      <p style="font-size:.74rem;color:var(--text2);margin-bottom:7px">&#9728;&#65039; Horas de luz diarias:</p>
       <div class="cfield">
-        <label>Plantula (h)</label>
+        <label>Plantula</label>
         <div class="srow" style="flex:1;margin:0">
           <input type="range" min="12" max="20" id="cfg-luz-pl" oninput="document.getElementById('cfg-luz-pl-v').textContent=this.value+'h'">
           <span id="cfg-luz-pl-v" class="sval">18h</span>
         </div>
-        <button class="btn btn-o" onclick="sc({cmd:'luz',args:'pl '+document.getElementById('cfg-luz-pl').value},this)">Guardar</button>
       </div>
       <div class="cfield">
-        <label>Vegetativo (h)</label>
+        <label>Vegetativo</label>
         <div class="srow" style="flex:1;margin:0">
           <input type="range" min="12" max="20" id="cfg-luz-veg" oninput="document.getElementById('cfg-luz-veg-v').textContent=this.value+'h'">
           <span id="cfg-luz-veg-v" class="sval">18h</span>
         </div>
-        <button class="btn btn-o" onclick="sc({cmd:'luz',args:'veg '+document.getElementById('cfg-luz-veg').value},this)">Guardar</button>
       </div>
-      <p style="font-size:.72rem;color:var(--text2)">Pre-floracion / Floracion / Final: 12h &mdash; fijo por etapa</p>
+      <p style="font-size:.72rem;color:var(--text2);margin-top:4px">Pre-floracion / Floracion / Final: 12&nbsp;h &mdash; fijo</p>
       <div class="cact" style="margin-top:14px">
         <button class="btn btn-p" onclick="savePlanta(this)">&#128190; Guardar planta</button>
       </div>
@@ -471,22 +479,22 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 
   <!-- Alertas -->
   <details class="csec" open>
-    <summary style="border-left-color:#ff8c00">&#9888; Alertas</summary>
+    <summary style="border-left-color:#ff8c00">&#9888;&#65039; Alertas</summary>
     <div class="cbody">
       <div class="cfield">
-        <label>Temp maxima (C)</label>
+        <label>Temp maxima (&#176;C)</label>
         <input type="number" id="cfg-tmax" min="20" max="45" value="30">
       </div>
       <div class="cfield">
-        <label>Humedad minima (%)</label>
+        <label>Humedad minima (%) <span class="cfield-note">Plantula &amp; Vegetativo</span></label>
         <input type="number" id="cfg-hmin" min="10" max="80" value="45">
       </div>
       <div class="cfield">
-        <label>Humedad maxima (%)</label>
+        <label>Humedad maxima (%) <span class="cfield-note">Pre-flor &middot; Floracion &middot; Final</span></label>
         <input type="number" id="cfg-hmax" min="20" max="95" value="60">
       </div>
       <div class="cfield">
-        <label>Aire maximo (raw)</label>
+        <label>Calidad aire max (raw)</label>
         <input type="number" id="cfg-mq" min="100" max="4095" value="500">
       </div>
       <div class="cact">
@@ -497,10 +505,12 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 
   <!-- Suelo y Bomba -->
   <details class="csec" open>
-    <summary style="border-left-color:#00e5ff">&#128167; Suelo y Bomba</summary>
+    <summary style="border-left-color:#00e5ff">
+      &#128167; Suelo y Bomba
+      <span class="csec-meta"><span id="cfg-pump-tag" class="csec-tag" style="background:rgba(255,18,79,.12);color:var(--c4);border-color:#ff124f44">Sin calibrar</span></span>
+    </summary>
     <div class="cbody">
-      <div id="pump-cal-ind" style="font-size:.8rem;margin-bottom:9px">&#11036; Estado bomba: ---</div>
-      <p class="cnote">Umbral activacion: regar si suelo &lt; seco. Umbral omitir: no regar si suelo &ge; humedo.</p>
+      <p class="cnote">Regar cuando el suelo este por debajo del umbral seco; omitir si supera el umbral humedo.</p>
       <div class="cfield">
         <label>Umbral seco (%)</label>
         <input type="number" id="cfg-smin" min="0" max="50" value="25">
@@ -512,67 +522,38 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
       <div class="cact">
         <button class="btn btn-p" onclick="saveUmbralesSuelo(this)">&#128190; Guardar umbrales</button>
       </div>
-      <hr style="border-color:var(--border);margin:12px 0">
-      <p class="cnote">Calibracion ADC: mide el valor raw del sensor en seco y en humedo (ver gauge Suelo RAW en dashboard).</p>
+      <hr class="cfg-divider">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+        <p style="font-size:.74rem;color:var(--text2);margin:0">Calibracion ADC del sensor de suelo</p>
+        <button class="cfg-unlock" id="adc-unlock-btn" onclick="unlockAdc(this)">&#128275; Editar</button>
+      </div>
+      <p class="cnote" style="margin-bottom:9px">Valores obtenidos midiendo el sensor en suelo seco y completamente humedo (ver gauge Suelo RAW en dashboard).</p>
       <div class="cfield">
-        <label>ADC seco (0-4095)</label>
-        <input type="number" id="cfg-adry" min="0" max="4095" value="2150">
+        <label>ADC seco (raw)</label>
+        <input type="number" id="cfg-adry" class="cfg-ro" readonly min="0" max="4095" value="2150">
       </div>
       <div class="cfield">
-        <label>ADC humedo (0-4095)</label>
-        <input type="number" id="cfg-awet" min="0" max="4095" value="500">
+        <label>ADC humedo (raw)</label>
+        <input type="number" id="cfg-awet" class="cfg-ro" readonly min="0" max="4095" value="500">
       </div>
-      <div class="cact">
+      <div class="cact" id="adc-save-row" style="display:none">
         <button class="btn btn-p" onclick="saveSuelo(this)">&#128190; Guardar calibracion ADC</button>
       </div>
     </div>
   </details>
 
-  <!-- Sistema -->
-  <details class="csec" open>
-    <summary style="border-left-color:#fe75fe">&#127757; Sistema</summary>
+  <!-- Sistema (cerrado por defecto) -->
+  <details class="csec">
+    <summary style="border-left-color:#fe75fe">
+      &#127757; Sistema
+      <span class="csec-meta"><span class="csec-hint">Zona horaria</span></span>
+    </summary>
     <div class="cbody">
-      <p class="cnote">UTC offset en horas. Ej: -3 para UTC-3 (Argentina).</p>
+      <p class="cnote">Offset respecto a UTC en horas. Ejemplo: -3 para UTC-3 (Argentina), -5 para UTC-5 (Mexico/Colombia).</p>
       <div class="cfield">
-        <label>Zona horaria (h)</label>
+        <label>Zona horaria (UTC&#177;h)</label>
         <input type="number" id="cfg-tz" min="-12" max="14" value="-3">
         <button class="btn btn-p" onclick="sc({cmd:'timezone',args:document.getElementById('cfg-tz').value},this)">&#128190; Guardar</button>
-      </div>
-    </div>
-  </details>
-
-  <!-- Visualizacion -->
-  <details class="csec" open>
-    <summary style="border-left-color:#7a04eb">&#127912; Visualizacion</summary>
-    <div class="cbody">
-      <p class="cnote">Estos ajustes solo afectan la visualizacion del dashboard en este navegador.</p>
-      <div class="srow">
-        <label>Temp alerta (C)</label>
-        <input type="range" min="20" max="45" id="vt" oninput="visU()">
-        <span class="sval" id="vt-v">32</span>
-      </div>
-      <div class="srow">
-        <label>RH minima (%)</label>
-        <input type="range" min="10" max="80" id="vrl" oninput="visU()">
-        <span class="sval" id="vrl-v">40</span>
-      </div>
-      <div class="srow">
-        <label>RH maxima (%)</label>
-        <input type="range" min="20" max="100" id="vrh" oninput="visU()">
-        <span class="sval" id="vrh-v">70</span>
-      </div>
-      <div class="srow">
-        <label>Suelo min (%)</label>
-        <input type="range" min="0" max="50" id="vsl" oninput="visU()">
-        <span class="sval" id="vsl-v">25</span>
-      </div>
-      <div class="srow">
-        <label>MQ alerta (raw)</label>
-        <input type="range" min="100" max="4095" step="50" id="vm" oninput="visU()">
-        <span class="sval" id="vm-v">500</span>
-      </div>
-      <div class="cact">
-        <button class="btn btn-o" onclick="visReset()">Restaurar defaults</button>
       </div>
     </div>
   </details>
@@ -586,8 +567,8 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 // ── State
 var ws, tsBase=0, tsAt=0, fanAuto=true, autoIrr=true;
 var logIdx={};
-var VD={tWarn:32,rhL:40,rhH:70,slL:25,mqW:500};
-var V=Object.assign({},VD,JSON.parse(localStorage.getItem('gh_vis')||'{}'));
+// Umbrales de visualizacion: se sincronizan desde /api/config al abrir Config
+var V={tWarn:32,rhL:40,rhH:70,slL:25,mqW:500};
 // Fan RPM history
 var rpmHist=[], RPM_MAX_PTS=40;
 
@@ -704,6 +685,7 @@ function syncCtrl(d){
   if(d.pump_calibrated!==undefined){
     var ps=document.getElementById('pump-st');
     ps.textContent=d.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
+    setPumpTag(d.pump_calibrated);
   }
 }
 
@@ -822,9 +804,17 @@ function loadConfig(){
     sv('cfg-smin',c.soil_min_pct);sv('cfg-smax',c.soil_max_pct);
     sv('cfg-adry',c.soil_dry_adc);sv('cfg-awet',c.soil_wet_adc);
     sv('cfg-tz',c.tz_offset);
-    var pi=document.getElementById('pump-cal-ind');
-    pi.textContent=c.pump_calibrated?'\u2705 Bomba calibrada':'\u26A0\uFE0F Sin calibrar';
+    // Sincronizar umbrales de visualizacion desde el dispositivo
+    if(c.temp_max)V.tWarn=c.temp_max;
+    if(c.hum_min)V.rhL=c.hum_min;
+    if(c.hum_max)V.rhH=c.hum_max;
+    if(c.soil_min_pct)V.slL=c.soil_min_pct;
+    if(c.mq_max)V.mqW=c.mq_max;
+    // Actualizar chip de bomba en la seccion Suelo y Bomba
+    setPumpTag(c.pump_calibrated);
     document.getElementById('pump-st').textContent=c.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
+    // Actualizar badge de etapa en la seccion Planta
+    updateStageTag(c.stage);
     if(c.bot_name){
       sv('tg-name',c.bot_name);
       var pl=document.getElementById('tg-prev-lnk');
@@ -870,31 +860,33 @@ function togglePwd(id,btn){
   btn.textContent=i.type==='password'?'\u{1F441}':'\uD83D\uDE48';
 }
 
-// ── Visualization
-function visU(){
-  V.tWarn=+document.getElementById('vt').value;
-  V.rhL=+document.getElementById('vrl').value;
-  V.rhH=+document.getElementById('vrh').value;
-  V.slL=+document.getElementById('vsl').value;
-  V.mqW=+document.getElementById('vm').value;
-  document.getElementById('vt-v').textContent=V.tWarn;
-  document.getElementById('vrl-v').textContent=V.rhL;
-  document.getElementById('vrh-v').textContent=V.rhH;
-  document.getElementById('vsl-v').textContent=V.slL;
-  document.getElementById('vm-v').textContent=V.mqW;
-  localStorage.setItem('gh_vis',JSON.stringify(V));
+// ── Config helpers
+function updateStageTag(s){
+  var t=document.getElementById('cfg-stage-tag');
+  if(!t)return;
+  var map={pl:'Plantula',veg:'Vegetativo',pre:'Pre-flor',flo:'Floracion',fin:'Final'};
+  t.textContent=map[s]||s||'---';
 }
-function visReset(){
-  V=Object.assign({},VD);
-  localStorage.setItem('gh_vis',JSON.stringify(V));
-  applyVis();
+function setPumpTag(cal){
+  var t=document.getElementById('cfg-pump-tag');
+  if(!t)return;
+  if(cal){
+    t.textContent='Calibrada';
+    t.style.cssText='background:rgba(57,255,20,.12);color:var(--neon);border-color:#39ff1440';
+  } else {
+    t.textContent='Sin calibrar';
+    t.style.cssText='background:rgba(255,18,79,.12);color:var(--c4);border-color:#ff124f44';
+  }
 }
-function applyVis(){
-  sv('vt',V.tWarn);document.getElementById('vt-v').textContent=V.tWarn;
-  sv('vrl',V.rhL);document.getElementById('vrl-v').textContent=V.rhL;
-  sv('vrh',V.rhH);document.getElementById('vrh-v').textContent=V.rhH;
-  sv('vsl',V.slL);document.getElementById('vsl-v').textContent=V.slL;
-  sv('vm',V.mqW);document.getElementById('vm-v').textContent=V.mqW;
+function unlockAdc(btn){
+  var dry=document.getElementById('cfg-adry');
+  var wet=document.getElementById('cfg-awet');
+  var row=document.getElementById('adc-save-row');
+  var locked=dry.readOnly;
+  dry.readOnly=!locked;wet.readOnly=!locked;
+  dry.classList.toggle('unlocked',locked);wet.classList.toggle('unlocked',locked);
+  row.style.display=locked?'flex':'none';
+  btn.textContent=locked?'\uD83D\uDD12 Bloquear':'\uD83D\uDD13 Editar';
 }
 
 // ── Fan RPM sparkline
@@ -943,7 +935,6 @@ function saveUmbralesSuelo(btn){
 (function(){
   var cu=localStorage.getItem('gh_cam_url');
   if(cu){document.getElementById('cam-url').value=cu;camConnect()}
-  applyVis();
   wsConn();
   loadEvents();
 }());
