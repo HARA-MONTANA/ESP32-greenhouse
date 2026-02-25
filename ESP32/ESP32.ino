@@ -56,6 +56,11 @@ float cachedRh = NAN;
 unsigned long lastDhtReadMs = 0;
 bool dhtValid = false;
 
+// Caché de ADC rápidos (suelo y MQ) — evita lecturas duplicadas en el mismo ciclo
+int cachedSoilAdc = 0;
+int cachedMqRaw   = 0;
+unsigned long lastFastSensorMs = 0;
+
 // Fan PWM
 const int FAN_PWM_CHANNEL = 0;
 const int FAN_PWM_FREQ = 25000;
@@ -179,6 +184,19 @@ bool readAmbient(float &tempC, float &rh) {
   return true;
 }
 
+// Lectura de ADC con caché de 500 ms: suelo y MQ leídos una sola vez por ciclo
+void readFastSensors(int &soilAdc, int &mqRaw) {
+  unsigned long now = millis();
+  if (now - lastFastSensorMs < 500) {
+    soilAdc = cachedSoilAdc;
+    mqRaw   = cachedMqRaw;
+    return;
+  }
+  cachedSoilAdc = soilAdc = readSoilMoisture();
+  cachedMqRaw   = mqRaw   = analogRead(PIN_MQ135);
+  lastFastSensorMs = now;
+}
+
 bool parseOnOff(const String &val) {
   String s = val;
   s.toLowerCase();
@@ -225,10 +243,10 @@ void broadcastSensorData() {
   if (wsEndpoint.count() == 0) return;
 
   float tempC, rh;
-  bool valid   = readAmbient(tempC, rh);
-  int  soilAdc = readSoilMoisture();
+  bool valid = readAmbient(tempC, rh);
+  int  soilAdc, mqRaw;
+  readFastSensors(soilAdc, mqRaw);
   int  soilPct = soilPercentFromAdc(soilAdc);
-  int  mqRaw   = analogRead(PIN_MQ135);
   time_t ts;
   time(&ts);
 
@@ -287,13 +305,16 @@ void initWebServer() {
       msg.reserve(len);
       for (size_t i = 0; i < len; i++) msg += (char)data[i];
       StaticJsonDocument<128> cmd;
-      if (deserializeJson(cmd, msg) == DeserializationError::Ok) {
+      DeserializationError jsonErr = deserializeJson(cmd, msg);
+      if (jsonErr == DeserializationError::Ok) {
         String c = cmd["cmd"] | "";
         String a = cmd["args"] | "";
         if (!c.isEmpty()) {
           handleCommand("ws", a.length() ? c + " " + a : c);
           broadcastSensorData();
         }
+      } else {
+        Serial.printf("[WS] JSON invalido: %s\n", jsonErr.c_str());
       }
     }
   });
@@ -498,8 +519,9 @@ void evaluateAlerts() {
   // en todos los bloques de alerta (incluido el de agua, que va primero)
   float tempC, rh;
   bool ok = readAmbient(tempC, rh);
-  int soilPct = soilPercentFromAdc(readSoilMoisture());
-  int mqRaw   = analogRead(PIN_MQ135);
+  int soilAdc, mqRaw;
+  readFastSensors(soilAdc, mqRaw);
+  int soilPct = soilPercentFromAdc(soilAdc);
   plantStage stage = getCurrentStage();
 
   bool water = isTankWaterAvailable();
@@ -1453,20 +1475,26 @@ void setup() {
   rtcReady = initRtc();
 
   // WiFi
-  connectWifi();
+  bool wifiOk = connectWifi();
+  if (!wifiOk) {
+    Serial.println("[WiFi] Sin conexion. Telegram y dashboard no disponibles.");
+  }
 
   // NTP (o fallback a RTC)
-  bool ntpOk = syncNtp();
+  bool ntpOk = wifiOk && syncNtp();
   if (!ntpOk) {
     Serial.println("NTP fallo, intentando RTC...");
-    setTimeFromRtc();
+    if (!setTimeFromRtc()) {
+      Serial.println("[HORA] Sin fuente de tiempo valida. Timestamps pueden ser incorrectos.");
+    }
   }
 
   // SD card (después de NTP para que los timestamps sean correctos)
-  sdInit();
+  bool sdOk = sdInit();
   logAccion("INICIO", "Sistema iniciado; WiFi " +
-            String(WiFi.status() == WL_CONNECTED ? "OK" : "FALLO") +
-            "; NTP " + String(ntpOk ? "OK" : "FALLO"));
+            String(wifiOk ? "OK" : "FALLO") +
+            "; NTP " + String(ntpOk ? "OK" : "FALLO") +
+            "; SD " + String(sdOk ? "OK" : "FALLO"));
 
   // Calcular el primer slot de log alineado al reloj (múltiplo de 5 min)
   // Usa el RTC directamente como fuente de tiempo; cae back a NTP si no hay RTC
