@@ -214,7 +214,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('temp',this)"><span>&#127777; Temperatura</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-temp" style="display:none"><svg id="spk-temp" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(122,4,235,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-temp" style="display:none"><svg id="spk-temp" viewBox="0 0 240 72" preserveAspectRatio="none" style="width:100%;height:72px;background:rgba(122,4,235,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-rh">
@@ -227,7 +227,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('rh',this)"><span>&#128167; Humedad</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-rh" style="display:none"><svg id="spk-rh" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-rh" style="display:none"><svg id="spk-rh" viewBox="0 0 240 72" preserveAspectRatio="none" style="width:100%;height:72px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-soil">
@@ -240,7 +240,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('soil',this)"><span>&#127807; Suelo</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-soil" style="display:none"><svg id="spk-soil" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(57,255,20,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-soil" style="display:none"><svg id="spk-soil" viewBox="0 0 240 72" preserveAspectRatio="none" style="width:100%;height:72px;background:rgba(57,255,20,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-mq">
@@ -253,7 +253,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('mq',this)"><span>&#127787; Aire MQ</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-mq" style="display:none"><svg id="spk-mq" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(254,117,254,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-mq" style="display:none"><svg id="spk-mq" viewBox="0 0 240 72" preserveAspectRatio="none" style="width:100%;height:72px;background:rgba(254,117,254,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-soil-raw">
@@ -266,7 +266,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('soil-raw',this)"><span>&#127807; Suelo RAW</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-soil-raw" style="display:none"><svg id="spk-soil-raw" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(255,140,0,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-soil-raw" style="display:none"><svg id="spk-soil-raw" viewBox="0 0 240 72" preserveAspectRatio="none" style="width:100%;height:72px;background:rgba(255,140,0,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-fan-rpm">
@@ -279,7 +279,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('fan-rpm',this)"><span>&#127744; Fan RPM</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-fan-rpm" style="display:none"><svg id="spk-fan-rpm" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-fan-rpm" style="display:none"><svg id="spk-fan-rpm" viewBox="0 0 240 72" preserveAspectRatio="none" style="width:100%;height:72px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
   </div><!-- /sensor-grid -->
@@ -348,8 +348,8 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         <span style="font-size:.72rem;color:var(--cyan);margin-left:6px" id="fan-rpm-lbl">-- RPM</span>
       </div>
       <div style="margin-top:8px">
-        <svg id="rpm-chart" viewBox="0 0 200 36" preserveAspectRatio="none"
-          style="width:100%;height:36px;background:rgba(0,229,255,.05);border-radius:4px;display:block"></svg>
+        <svg id="rpm-chart" viewBox="0 0 240 72" preserveAspectRatio="none"
+          style="width:100%;height:72px;background:rgba(0,229,255,.05);border-radius:4px;display:block"></svg>
       </div>
     </div>
 
@@ -585,8 +585,8 @@ var ws, tsBase=0, tsAt=0, fanAuto=true, autoIrr=true;
 var logIdx={};
 // Umbrales de visualizacion: se sincronizan desde /api/config al abrir Config
 var V={tWarn:32,rhL:40,rhH:70,slL:25,mqW:500};
-// Sensor sparkline histories
-var SPK_MAX=40;
+// Sensor sparkline histories — 20-minute rolling window
+var SPK_WIN=20*60*1000; // ms
 var spkData={
   temp:[],rh:[],soil:[],mq:[],'soil-raw':[],'fan-rpm':[]
 };
@@ -594,8 +594,8 @@ var spkColor={
   temp:'#7a04eb',rh:'#00e5ff',soil:'#39ff14',mq:'#fe75fe',
   'soil-raw':'#ff8c00','fan-rpm':'#00e5ff'
 };
-// Fan RPM history (legacy - keep for backward compat)
-var rpmHist=[], RPM_MAX_PTS=40;
+// Fan RPM history — 20-minute rolling window
+var rpmHist=[];
 
 // ── WebSocket
 function wsConn(){
@@ -624,15 +624,16 @@ function onWs(d){
   // Soil raw ADC (menor = mas humedo; sin alerta de color, rango 0-4095)
   gauge('soil-raw',d.soil_adc,0,4095,9999,9999);
   // Fan RPM
-  if(d.fan_rpm!==undefined){pushRpm(d.fan_rpm)}
+  var spkTs=d.ts?d.ts*1000:Date.now();
+  if(d.fan_rpm!==undefined){pushRpm(d.fan_rpm,spkTs)}
   gauge('fan-rpm',d.fan_rpm,0,3000,1500,2500);
   // Sparklines
-  if(d.temp_c!=null)pushSpk('temp',d.temp_c);
-  if(d.rh_pct!=null)pushSpk('rh',d.rh_pct);
-  if(d.soil_pct!=null)pushSpk('soil',d.soil_pct);
-  if(d.mq_raw!=null)pushSpk('mq',d.mq_raw);
-  if(d.soil_adc!=null)pushSpk('soil-raw',d.soil_adc);
-  if(d.fan_rpm!=null)pushSpk('fan-rpm',d.fan_rpm);
+  if(d.temp_c!=null)pushSpk('temp',d.temp_c,spkTs);
+  if(d.rh_pct!=null)pushSpk('rh',d.rh_pct,spkTs);
+  if(d.soil_pct!=null)pushSpk('soil',d.soil_pct,spkTs);
+  if(d.mq_raw!=null)pushSpk('mq',d.mq_raw,spkTs);
+  if(d.soil_adc!=null)pushSpk('soil-raw',d.soil_adc,spkTs);
+  if(d.fan_rpm!=null)pushSpk('fan-rpm',d.fan_rpm,spkTs);
   alrt('card-temp',d.alert_temp);
   alrt('card-rh',d.alert_rh);
   alrt('card-mq',d.alert_mq);
@@ -963,25 +964,53 @@ function unlockAdc(btn){
 }
 
 // ── Fan RPM sparkline
-function pushRpm(v){
-  rpmHist.push(v);
-  if(rpmHist.length>RPM_MAX_PTS)rpmHist.shift();
+function pushRpm(v,ts){
+  var t=ts||Date.now();
+  rpmHist.push({t:t,v:v});
+  var cutoff=t-SPK_WIN;
+  while(rpmHist.length>0&&rpmHist[0].t<cutoff)rpmHist.shift();
   var lbl=document.getElementById('fan-rpm-lbl');
   if(lbl)lbl.textContent=v+' RPM';
   drawRpmChart();
 }
 function drawRpmChart(){
   var svg=document.getElementById('rpm-chart');
-  if(!svg||rpmHist.length<2)return;
-  var W=200,H=36;
-  var mx=Math.max.apply(null,rpmHist);
+  if(!svg||rpmHist.length<1)return;
+  var VW=240,VH=72,ML=28,MR=6,MT=5,MB=16;
+  var PW=VW-ML-MR,PH=VH-MT-MB;
+  var col='#00e5ff';
+  var now=rpmHist[rpmHist.length-1].t;
+  var tMin=now-SPK_WIN;
+  var vals=rpmHist.map(function(p){return p.v;});
+  var mn=0,mx=Math.max.apply(null,vals);
   if(mx<100)mx=100;
-  var pts=rpmHist.map(function(r,i){
-    var x=((i/(RPM_MAX_PTS-1))*W).toFixed(1);
-    var y=(H-(r/mx)*(H-4)-2).toFixed(1);
-    return x+','+y;
-  }).join(' ');
-  svg.innerHTML='<polyline points="'+pts+'" fill="none" stroke="#00e5ff" stroke-width="1.5" stroke-linejoin="round"/>';
+  function tx(t){return (ML+(t-tMin)/SPK_WIN*PW).toFixed(1);}
+  function ty(v){return (MT+PH-((v-mn)/(mx-mn))*PH).toFixed(1);}
+  var s='';
+  for(var m=5;m<=20;m+=5){
+    var gx=(ML+(1-m/20)*PW).toFixed(1);
+    s+='<line x1="'+gx+'" y1="'+MT+'" x2="'+gx+'" y2="'+(MT+PH)+'" stroke="#ffffff12" stroke-width="0.5" stroke-dasharray="2,3"/>';
+  }
+  s+='<line x1="'+ML+'" y1="'+MT+'" x2="'+ML+'" y2="'+(MT+PH)+'" stroke="#ffffff25" stroke-width="0.5"/>';
+  s+='<line x1="'+ML+'" y1="'+(MT+PH)+'" x2="'+(ML+PW)+'" y2="'+(MT+PH)+'" stroke="#ffffff25" stroke-width="0.5"/>';
+  [{m:20,l:'-20m'},{m:15,l:'-15m'},{m:10,l:'-10m'},{m:5,l:'-5m'},{m:0,l:'ahora'}].forEach(function(lx){
+    var xt=(ML+(1-lx.m/20)*PW).toFixed(1);
+    s+='<line x1="'+xt+'" y1="'+(MT+PH)+'" x2="'+xt+'" y2="'+(MT+PH+2)+'" stroke="#ffffff30" stroke-width="0.5"/>';
+    s+='<text x="'+xt+'" y="'+(VH-2)+'" text-anchor="middle" fill="#9b59b6" font-size="5.5" font-family="Courier New">'+lx.l+'</text>';
+  });
+  [mn,Math.round((mn+mx)/2),mx].forEach(function(v){
+    var yt=ty(v);
+    s+='<text x="'+(ML-2)+'" y="'+yt+'" text-anchor="end" dominant-baseline="middle" fill="#9b59b6" font-size="5.5" font-family="Courier New">'+v+'</text>';
+  });
+  if(rpmHist.length>=2){
+    var pts=rpmHist.map(function(p){return tx(p.t)+','+ty(p.v);}).join(' ');
+    var bot=(MT+PH).toFixed(1);
+    s+='<polygon points="'+tx(rpmHist[0].t)+','+bot+' '+pts+' '+tx(rpmHist[rpmHist.length-1].t)+','+bot+'" fill="'+col+'" opacity="0.13"/>';
+    s+='<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.5" stroke-linejoin="round"/>';
+  }
+  var lp=rpmHist[rpmHist.length-1];
+  s+='<circle cx="'+tx(lp.t)+'" cy="'+ty(lp.v)+'" r="2" fill="'+col+'"/>';
+  svg.innerHTML=s;
 }
 
 // ── Sensor sparklines
@@ -994,34 +1023,66 @@ function toggleSpk(key,lbl){
   if(arrow)arrow.classList.toggle('open',opening);
   if(opening)drawSpk(key);
 }
-function pushSpk(key,val){
+function pushSpk(key,val,ts){
   var h=spkData[key];
   if(!h)return;
-  h.push(val);
-  if(h.length>SPK_MAX)h.shift();
+  var t=ts||Date.now();
+  h.push({t:t,v:val});
+  var cutoff=t-SPK_WIN;
+  while(h.length>0&&h[0].t<cutoff)h.shift();
   drawSpk(key);
 }
 function drawSpk(key){
   var svg=document.getElementById('spk-'+key);
   var h=spkData[key];
-  if(!svg||!h||h.length<2)return;
-  var W=200,H=28;
-  var mn=Math.min.apply(null,h);
-  var mx=Math.max.apply(null,h);
-  if(mx===mn){mn=mn-1;mx=mx+1;}
+  if(!svg||!h||h.length<1)return;
+  var VW=240,VH=72,ML=28,MR=6,MT=5,MB=16;
+  var PW=VW-ML-MR,PH=VH-MT-MB;
   var col=spkColor[key]||'#7a04eb';
-  var n=h.length;
-  var pts=h.map(function(v,i){
-    var x=((i/(SPK_MAX-1))*W).toFixed(1);
-    var y=(H-2-((v-mn)/(mx-mn))*(H-4)).toFixed(1);
-    return x+','+y;
-  }).join(' ');
-  // filled area
-  var first=((0/(SPK_MAX-1))*W).toFixed(1);
-  var last=(((n-1)/(SPK_MAX-1))*W).toFixed(1);
-  svg.innerHTML=
-    '<polygon points="'+first+','+(H-1)+' '+pts+' '+last+','+(H-1)+'" fill="'+col+'" opacity="0.13"/>'+
-    '<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.5" stroke-linejoin="round"/>';
+  var now=h[h.length-1].t;
+  var tMin=now-SPK_WIN;
+  var vals=h.map(function(p){return p.v;});
+  var mn=Math.min.apply(null,vals);
+  var mx=Math.max.apply(null,vals);
+  if(mx===mn){mn=Math.max(0,mn-1);mx=mx+1;}
+  var vRange=mx-mn;
+  function tx(t){return (ML+(t-tMin)/SPK_WIN*PW).toFixed(1);}
+  function ty(v){return (MT+PH-((v-mn)/vRange)*PH).toFixed(1);}
+  function fmtV(v){if(v%1===0)return ''+v;if(Math.abs(v)>=10)return v.toFixed(0);return v.toFixed(1);}
+  var s='';
+  // vertical grid at 5-min intervals
+  for(var m=5;m<=20;m+=5){
+    var gx=(ML+(1-m/20)*PW).toFixed(1);
+    s+='<line x1="'+gx+'" y1="'+MT+'" x2="'+gx+'" y2="'+(MT+PH)+'" stroke="#ffffff12" stroke-width="0.5" stroke-dasharray="2,3"/>';
+  }
+  // horizontal grid at midpoint
+  var gy=ty(mn+vRange/2);
+  s+='<line x1="'+ML+'" y1="'+gy+'" x2="'+(ML+PW)+'" y2="'+gy+'" stroke="#ffffff10" stroke-width="0.5" stroke-dasharray="2,4"/>';
+  // axes
+  s+='<line x1="'+ML+'" y1="'+MT+'" x2="'+ML+'" y2="'+(MT+PH)+'" stroke="#ffffff25" stroke-width="0.5"/>';
+  s+='<line x1="'+ML+'" y1="'+(MT+PH)+'" x2="'+(ML+PW)+'" y2="'+(MT+PH)+'" stroke="#ffffff25" stroke-width="0.5"/>';
+  // X axis labels
+  [{m:20,l:'-20m'},{m:15,l:'-15m'},{m:10,l:'-10m'},{m:5,l:'-5m'},{m:0,l:'ahora'}].forEach(function(lx){
+    var xt=(ML+(1-lx.m/20)*PW).toFixed(1);
+    s+='<line x1="'+xt+'" y1="'+(MT+PH)+'" x2="'+xt+'" y2="'+(MT+PH+2)+'" stroke="#ffffff30" stroke-width="0.5"/>';
+    s+='<text x="'+xt+'" y="'+(VH-2)+'" text-anchor="middle" fill="#9b59b6" font-size="5.5" font-family="Courier New">'+lx.l+'</text>';
+  });
+  // Y axis labels: min, mid, max
+  [mn,mn+vRange/2,mx].forEach(function(v){
+    var yt=ty(v);
+    s+='<text x="'+(ML-2)+'" y="'+yt+'" text-anchor="end" dominant-baseline="middle" fill="#9b59b6" font-size="5.5" font-family="Courier New">'+fmtV(v)+'</text>';
+  });
+  // data area and line
+  if(h.length>=2){
+    var pts=h.map(function(p){return tx(p.t)+','+ty(p.v);}).join(' ');
+    var bot=(MT+PH).toFixed(1);
+    s+='<polygon points="'+tx(h[0].t)+','+bot+' '+pts+' '+tx(h[h.length-1].t)+','+bot+'" fill="'+col+'" opacity="0.13"/>';
+    s+='<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.5" stroke-linejoin="round"/>';
+  }
+  // dot at latest reading
+  var lp=h[h.length-1];
+  s+='<circle cx="'+tx(lp.t)+'" cy="'+ty(lp.v)+'" r="2" fill="'+col+'"/>';
+  svg.innerHTML=s;
 }
 
 // ── Config save helpers
