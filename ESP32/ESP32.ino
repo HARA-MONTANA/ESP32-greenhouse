@@ -12,6 +12,7 @@
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
 #include <ArduinoJson.h>
+#include <esp_wifi.h>
 
 #include "pins.h"
 #include "config.h"
@@ -121,6 +122,12 @@ unsigned long lastFanMs = 0;
 unsigned long lastSoilMs = 0;
 unsigned long lastTelegramMs = 0;
 time_t nextSdLogEpoch = 0;   // epoch del próximo log alineado al reloj; 0 = no inicializado
+
+// WiFi Modem Sleep — ahorra ~50-120mA durmiendo el radio entre polls de Telegram.
+// Sensores, riego, luces y fan siguen activos (usan timers locales + RTC).
+bool  wifiSleepMode      = false;               // false = operacion normal; true = sleep activo
+unsigned long wifiSleepPollMs = 5UL * 60 * 1000; // Intervalo de poll en sleep mode (def: 5 min)
+bool  wifiPsSleeping     = false;               // true si el modem esta en power-save ahora
 
 // Web dashboard
 AsyncWebServer webServer(80);
@@ -766,7 +773,8 @@ String commandHelp() {
   h += "\n== Admin ==\n";
   h += "acceso [on|off] - Abrir/cerrar inscripcion (toggle sin argumento)\n";
   h += "addid [ID] / delid [ID] / ids\n";
-  h += "reset - Restablecer configuracion";
+  h += "reset - Restablecer configuracion\n";
+  h += "dormir [on|off] [min] - Sleep WiFi (ahorra energia entre polls)";
   return h;
 }
 
@@ -1051,6 +1059,34 @@ String handleCommand(const String &chatId, const String &raw) {
     logAccion("CMD", "reset de configuracion");
     configReset();
     return "Configuracion restablecida.";
+  }
+
+  // --- Sleep WiFi ---
+
+  if (cmd == "dormir" || cmd == "sleep") {
+    if (args.isEmpty()) {
+      if (!wifiSleepMode) return "Sleep WiFi: OFF (WiFi siempre activo)";
+      return "Sleep WiFi: ON | Poll Telegram cada " + String(wifiSleepPollMs / 60000) + " min\n"
+             "Modem duerme entre polls. Sensores/riego/luces: OK.";
+    }
+    int sp2 = args.indexOf(' ');
+    String sw = sp2 == -1 ? args : args.substring(0, sp2);
+    sw.toLowerCase();
+    if (sw == "off") {
+      wifiSleepMode = false;
+      setWifiPowerSave(false);
+      return "Sleep WiFi: OFF. WiFi en modo normal.";
+    }
+    if (sw == "on") {
+      if (sp2 != -1) {
+        int mins = constrain(args.substring(sp2 + 1).toInt(), 1, 60);
+        if (mins > 0) wifiSleepPollMs = (unsigned long)mins * 60000UL;
+      }
+      wifiSleepMode = true;
+      return "Sleep WiFi: ON | Telegram cada " + String(wifiSleepPollMs / 60000) + " min\n"
+             "Modem duerme entre polls. Sensores/riego/luces siguen activos.";
+    }
+    return "Uso: dormir [on|off] [minutos 1-60]";
   }
 
   return "Comando no reconocido. Usa: help";
@@ -1446,10 +1482,36 @@ bool initializeTelegramBot(uint8_t maxTokenRetries = 2) {
 //  TELEGRAM POLLING
 // =========================================================
 
+// Activa o desactiva el power-save del radio WiFi.
+// WIFI_PS_MAX_MODEM: radio duerme entre beacons DTIM → ahorra ~50-120mA.
+// WIFI_PS_NONE: radio siempre activo → máximo rendimiento.
+void setWifiPowerSave(bool enable) {
+  if (enable == wifiPsSleeping) return;
+  if (WiFi.status() != WL_CONNECTED) return;
+  esp_wifi_set_ps(enable ? WIFI_PS_MAX_MODEM : WIFI_PS_NONE);
+  wifiPsSleeping = enable;
+}
+
 void pollTelegram() {
   if (!telegramEnabled || WiFi.status() != WL_CONNECTED || !telegramBot) return;
   unsigned long now = millis();
-  if (now - lastTelegramMs < 1500) return;
+
+  if (wifiSleepMode && wsEndpoint.count() == 0) {
+    // Sleep mode activo y sin clientes web conectados:
+    // dormir el modem entre polls y despertar solo cuando toca.
+    if (now - lastTelegramMs < wifiSleepPollMs) {
+      setWifiPowerSave(true);   // modem a power-save hasta que toque el siguiente poll
+      return;
+    }
+    // Toca hacer poll: despertar el radio brevemente
+    setWifiPowerSave(false);
+    delay(20);  // pausa mínima para que el radio esté operativo
+  } else {
+    // Modo normal (sleep desactivado o hay clientes web activos)
+    setWifiPowerSave(false);
+    if (now - lastTelegramMs < 1500) return;
+  }
+
   lastTelegramMs = now;
 
   int n = telegramBot->getUpdates(telegramBot->last_message_received + 1);
