@@ -1781,10 +1781,26 @@ void setup() {
   // RTC
   rtcReady = initRtc();
 
-  // WiFi
-  bool wifiOk = connectWifi();
-  if (!wifiOk) {
-    Serial.println("[WiFi] Sin conexion. Telegram y dashboard no disponibles.");
+  // WiFi — si todo falla, re-solicita credenciales y reintenta
+  bool wifiOk = false;
+  while (!wifiOk) {
+    wifiOk = connectWifi();
+    if (!wifiOk) {
+      Serial.println();
+      Serial.println("[WiFi] Todas las redes fallaron. Ingresa nuevas credenciales.");
+      Serial.println("       Presiona Enter para reintentar con el valor entre [].");
+      Serial.println();
+      Serial.print("WiFi SSID [");
+      Serial.print(wifiSsid);
+      Serial.println("]:");
+      String s = readLineFromSerial("> ");
+      if (!s.isEmpty()) wifiSsid = s;
+      Serial.print("WiFi Password [");
+      Serial.print(wifiPassword.isEmpty() ? "vacio" : "****");
+      Serial.println("]:");
+      String p = readLineFromSerial("> ");
+      if (!p.isEmpty()) wifiPassword = p;
+    }
   }
 
   // NTP (o fallback a RTC)
