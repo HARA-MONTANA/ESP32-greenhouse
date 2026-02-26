@@ -19,6 +19,17 @@ const int PUMP_OFF_LEVEL = LOW;
 bool autoIrrigationEnabled = false;
 bool tankEmptyNotified = false;
 bool pumpNotCalibratedNotified = false;
+
+// Proteccion capa 1: limite de riegos por dia (ventana de 24h en RAM)
+const int MAX_DAILY_IRRIGATIONS = 4;
+unsigned long windowStartMs = 0;
+int dailyIrrigationCount = 0;
+bool dailyLimitNotified = false;
+
+// Proteccion capa 2: deteccion de falla de hardware en sensor de suelo
+// ADC ESP32 es de 12 bits (0-4095). Extremos indican corto o circuito abierto.
+const int ADC_FAULT_LOW  = 50;    // cortocircuito: los pines estan en corto
+const int ADC_FAULT_HIGH = 4050;  // circuito abierto: sensor desconectado o roto
 }  // namespace
 
 void initIrrigationHardware() {
@@ -60,6 +71,15 @@ bool checkSoilAndIrrigate() {
 
   if (!autoIrrigationEnabled) return false;
 
+  // Proteccion capa 2: valores ADC en extremos indican falla de hardware
+  if (soilReading <= ADC_FAULT_LOW || soilReading >= ADC_FAULT_HIGH) {
+    const char* tipo = soilReading <= ADC_FAULT_LOW ? "cortocircuito" : "circuito abierto";
+    broadcastMessage("ALERTA: Sensor de suelo dañado (" + String(tipo) +
+                     ", ADC=" + String(soilReading) + "). Auto riego desactivado.");
+    setAutoIrrigationEnabled(false);
+    return false;
+  }
+
   if (!isTankWaterAvailable()) {
     if (!tankEmptyNotified) {
       broadcastMessage("Riego omitido: tanque sin agua.");
@@ -70,24 +90,34 @@ bool checkSoilAndIrrigate() {
   tankEmptyNotified = false;
 
   const int highThreshold = getSoilHighThreshold();
-  if (highThreshold > 0 && soilPercent >= highThreshold) {
-    return false;
-  }
-
+  if (highThreshold > 0 && soilPercent >= highThreshold) return false;
   if (soilPercent >= getSoilThreshold()) return false;
 
-  const int intervalDays = max(getIrrigationIntervalDays(), 0);
-  const unsigned long intervalSeconds = static_cast<unsigned long>(intervalDays) * 86400UL;
+  // Cooldown minimo de 15 minutos entre riegos para no ciclar la bomba
   time_t now;
   time(&now);
   const unsigned long lastEpoch = getLastIrrigationEpoch();
-
-  if (intervalSeconds > 0 && now > 0 && lastEpoch > 0) {
-    if (difftime(now, static_cast<time_t>(lastEpoch)) < static_cast<double>(intervalSeconds)) {
-      return false;
-    }
+  if (now > 0 && lastEpoch > 0 && difftime(now, static_cast<time_t>(lastEpoch)) < 900.0) {
+    return false;
   }
 
+  // Proteccion capa 1: maximo MAX_DAILY_IRRIGATIONS riegos automaticos por dia
+  unsigned long nowMs = millis();
+  if (windowStartMs == 0 || nowMs - windowStartMs >= 86400000UL) {
+    windowStartMs = nowMs;
+    dailyIrrigationCount = 0;
+    dailyLimitNotified = false;
+  }
+  if (dailyIrrigationCount >= MAX_DAILY_IRRIGATIONS) {
+    if (!dailyLimitNotified) {
+      broadcastMessage("ALERTA: Limite diario de " + String(MAX_DAILY_IRRIGATIONS) +
+                       " riegos alcanzado. Verifica el sensor de suelo.");
+      dailyLimitNotified = true;
+    }
+    return false;
+  }
+
+  dailyIrrigationCount++;
   irrigate(soilReading);
   return true;
 }

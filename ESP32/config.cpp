@@ -19,7 +19,6 @@ float pumpFlow = 0.0f;
 bool pumpCalibrated = false;
 int soilThreshold = 20;
 int soilHighThreshold = 40;
-int irrigationIntervalDays = 2;
 unsigned long lastIrrigationEpoch = 0;
 bool autoIrrigationStored = false;
 plantStage currentStage = PLANTULA;
@@ -35,6 +34,7 @@ bool autoReadingsEnabled = false;
 unsigned long autoReadingsIntervalMs = 300000;
 int timezoneOffsetHours = -5;
 int ledIntensity = 100;
+bool reportCompact = false;
 
 void ensurePrefs() {
   if (!prefsStarted) {
@@ -82,7 +82,6 @@ void configInit() {
 
   soilThreshold = constrain(prefs.getInt("soilTh", soilThreshold), 0, 50);
   soilHighThreshold = constrain(prefs.getInt("soilHigh", soilHighThreshold), 10, 100);
-  irrigationIntervalDays = constrain(prefs.getInt("intDays", irrigationIntervalDays), 1, 5);
   lastIrrigationEpoch = prefs.getULong("lastIr", lastIrrigationEpoch);
   autoIrrigationStored = prefs.getBool("autoIr", autoIrrigationStored);
   currentStage = static_cast<plantStage>(prefs.getInt("stage", static_cast<int>(currentStage)));
@@ -104,6 +103,7 @@ void configInit() {
 
   timezoneOffsetHours = constrain(prefs.getInt("tzOff", timezoneOffsetHours), -12, 14);
   ledIntensity = constrain(prefs.getInt("led_int", ledIntensity), 1, 100);
+  reportCompact = prefs.getBool("rptCmp", reportCompact);
 }
 
 void configSave() {
@@ -122,7 +122,6 @@ void configSave() {
   prefs.putBool("flowCal", pumpCalibrated);
   prefs.putInt("soilTh", soilThreshold);
   prefs.putInt("soilHigh", soilHighThreshold);
-  prefs.putInt("intDays", irrigationIntervalDays);
   prefs.putULong("lastIr", lastIrrigationEpoch);
   prefs.putBool("autoIr", autoIrrigationStored);
   prefs.putInt("stage", static_cast<int>(currentStage));
@@ -138,6 +137,7 @@ void configSave() {
   prefs.putUInt("autoInt", autoReadingsIntervalMs);
   prefs.putInt("tzOff", timezoneOffsetHours);
   prefs.putInt("led_int", ledIntensity);
+  prefs.putBool("rptCmp", reportCompact);
 }
 
 void configReset() {
@@ -153,7 +153,6 @@ void configReset() {
   pumpCalibrated = false;
   soilThreshold = 20;
   soilHighThreshold = 40;
-  irrigationIntervalDays = 2;
   lastIrrigationEpoch = 0;
   autoIrrigationStored = false;
   currentStage = PLANTULA;
@@ -167,6 +166,7 @@ void configReset() {
   autoReadingsIntervalMs = 300000;
   timezoneOffsetHours = -5;
   ledIntensity = 100;
+  reportCompact = false;
   configSave();
 }
 
@@ -198,7 +198,6 @@ float getPumpFlow() { return pumpFlow; }
 bool isPumpCalibrated() { return pumpCalibrated; }
 int getSoilThreshold() { return soilThreshold; }
 int getSoilHighThreshold() { return soilHighThreshold; }
-int getIrrigationIntervalDays() { return irrigationIntervalDays; }
 unsigned long getLastIrrigationEpoch() { return lastIrrigationEpoch; }
 bool getAutoIrrigationStored() { return autoIrrigationStored; }
 
@@ -272,14 +271,6 @@ bool setSoilHighThreshold(int threshold) {
   soilHighThreshold = threshold;
   ensurePrefs();
   prefs.putInt("soilHigh", soilHighThreshold);
-  return true;
-}
-
-bool setIrrigationIntervalDays(int days) {
-  if (days < 1 || days > 5) return false;
-  irrigationIntervalDays = days;
-  ensurePrefs();
-  prefs.putInt("intDays", irrigationIntervalDays);
   return true;
 }
 
@@ -367,4 +358,14 @@ bool setLedIntensity(int pct) {
   ensurePrefs();
   prefs.putInt("led_int", ledIntensity);
   return true;
+}
+
+// --- Modo de reporte periodico ---
+
+bool getReportCompact() { return reportCompact; }
+
+void setReportCompact(bool compact) {
+  reportCompact = compact;
+  ensurePrefs();
+  prefs.putBool("rptCmp", reportCompact);
 }

@@ -148,6 +148,17 @@ String stageToCode(plantStage stage) {
   }
 }
 
+String stageToShort(plantStage stage) {
+  switch (stage) {
+    case PLANTULA:      return "PL";
+    case VEGETATIVO:    return "VEG";
+    case PRE_FLORACION: return "PRE";
+    case FLORACION:     return "FLO";
+    case FINAL:         return "FIN";
+    default:            return "N/D";
+  }
+}
+
 plantStage stageFromString(const String &val) {
   String s = val;
   s.toLowerCase();
@@ -342,7 +353,6 @@ void initWebServer() {
     doc["ml_fin"]         = getMlPerLiterForStage(FINAL);
     doc["luz_pl"]         = getLightHoursForStage(PLANTULA);
     doc["luz_veg"]        = getLightHoursForStage(VEGETATIVO);
-    doc["pause_days"]     = getIrrigationIntervalDays();
     doc["led_pct"]        = getLedIntensity();
     doc["soil_min_pct"]   = getSoilThreshold();
     doc["soil_max_pct"]   = getSoilHighThreshold();
@@ -630,7 +640,36 @@ void evaluateAlerts() {
 //  FORMATO DE ESTADO
 // =========================================================
 
-String formatStatus() {
+// Formato compacto para smartwatch (lineas cortas ~14 chars)
+String formatStatusCompact() {
+  float temp, rh;
+  bool ok = readAmbient(temp, rh);
+  int mq = analogRead(PIN_MQ135);
+  int soilAdc = readSoilMoisture();
+  int soilPct = soilPercentFromAdc(soilAdc);
+  bool water = isTankWaterAvailable();
+
+  String lastRiego = formatLastIrrigation();
+  String riegoHora = (lastRiego == "Sin registro") ? "--:--" : lastRiego.substring(0, 5);
+
+  bool ledOn = ledcRead(LED_PWM_CHANNEL) > 0;
+
+  String s;
+  s += "ESTADO\n";
+  s += "T:" + (ok ? String(temp, 1) + "C" : String("N/D"));
+  s += " HR:" + (ok ? String(rh, 0) + "%" : String("N/D")) + "\n";
+  s += "MQ:" + String(mq) + " S:" + String(soilPct) + "%\n";
+  s += "Fan:" + String(fanPercent) + "% [" + (fanAuto ? "A" : "M") + "]\n";
+  s += "Luz:" + String(areLightsOn() ? "ON" : "OFF") + "->" + formatLightsOffTime() + "\n";
+  s += "LED:" + (ledOn ? String(getLedIntensity()) + "%" : String("OFF"));
+  s += " [" + String(ledManual ? "M" : "A") + "]\n";
+  s += "Riego:" + riegoHora + " [" + String(isAutoIrrigationEnabled() ? "A" : "M") + "]\n";
+  s += "Agua:" + String(water ? "SI" : "NO") + " [" + stageToShort(getCurrentStage()) + "]";
+  return s;
+}
+
+// Formato completo para Telegram en celular
+String formatStatusFull() {
   float temp, rh;
   bool ok = readAmbient(temp, rh);
   int mq = analogRead(PIN_MQ135);
@@ -638,22 +677,22 @@ String formatStatus() {
   int soilPct = soilPercentFromAdc(soilAdc);
   bool water = isTankWaterAvailable();
   float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
+  bool ledOn = ledcRead(LED_PWM_CHANNEL) > 0;
 
   String s;
-  s += "==ESTADO==\n";
+  s += "== ESTADO ==\n";
   s += "Temp: " + (ok ? String(temp, 1) + "C" : String("N/D"));
-  s += " | HR: " + (ok ? String(rh, 0) + "%" : String("N/D"));
-  s += " | MQ: " + String(mq) + "\n";
-  s += "Suelo: " + String(soilPct) + "% | Fan: " + String(fanPercent) + "% [" + (fanAuto ? "AUTO" : "MANUAL") + "]\n";
-  s += "Etapa: " + stageToString(getCurrentStage());
-  s += " | Luz: " + String(areLightsOn() ? "ON" : "OFF") + " (OFF " + formatLightsOffTime() + ")";
-  s += " | Agua: " + String(water ? "SI" : "NO") + "\n";
-  s += "LED morado: ";
-  s += (ledcRead(LED_PWM_CHANNEL) > 0) ? String(getLedIntensity()) + "%" : String("OFF");
-  s += ledManual ? " [MANUAL]" : " [AUTO]";
-  s += "\n";
-  s += "Riego: " + formatLastIrrigation() + " | mL: " + String(stageMl, 0);
-  s += " | Auto: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF");
+  s += "   HR: " + (ok ? String(rh, 0) + "%" : String("N/D")) + "\n";
+  s += "Aire: " + String(mq) + "   Suelo: " + String(soilPct) + "%\n";
+  s += "Fan: " + String(fanPercent) + "%  [" + (fanAuto ? "AUTO" : "MANUAL") + "]\n";
+  s += "Luz: " + String(areLightsOn() ? "ON" : "OFF") + "   apaga " + formatLightsOffTime() + "\n";
+  s += "LED morado: " + (ledOn ? String(getLedIntensity()) + "%" : String("OFF"));
+  s += "  [" + String(ledManual ? "MANUAL" : "AUTO") + "]\n";
+  s += "Riego: " + formatLastIrrigation() + "\n";
+  s += "Auto: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF");
+  s += "   " + String(stageMl, 0) + " mL prog.\n";
+  s += "Agua: " + String(water ? "SI" : "NO");
+  s += "   Etapa: " + stageToString(getCurrentStage());
   return s;
 }
 
@@ -661,21 +700,23 @@ String formatConfig() {
   struct tm t;
   String now = getLocalTime(&t) ? formatDateTime(t) : "Sin hora";
   float potL = getPotVolumeL();
-  float stageMl = getMlPerLiterForStage(getCurrentStage()) * potL;
+  plantStage stage = getCurrentStage();
+  float stageMl = getMlPerLiterForStage(stage) * potL;
 
   String s;
-  s += "==CONFIG==\n";
-  s += "Etapa: " + stageToString(getCurrentStage()) + "\n";
-  s += "mL/L: Pl=" + String(getMlPerLiterForStage(PLANTULA));
-  s += " Veg=" + String(getMlPerLiterForStage(VEGETATIVO));
-  s += " Pre=" + String(getMlPerLiterForStage(PRE_FLORACION));
-  s += " Flo=" + String(getMlPerLiterForStage(FLORACION));
-  s += " Fin=" + String(getMlPerLiterForStage(FINAL)) + "\n";
-  s += "mL calculados: " + String(stageMl, 0) + " mL | Maceta: " + String(potL, 1) + " L\n";
-  s += "Suelo: min " + String(getSoilThreshold()) + "% max " + String(getSoilHighThreshold()) + "%\n";
-  s += "Intervalo riego: " + String(getIrrigationIntervalDays()) + " dias\n";
-  s += "Alertas: Temp>" + String(getTempAlertThreshold()) + "C HR<" + String(getRhLowAlertThreshold());
-  s += "% HR>" + String(getRhHighAlertThreshold()) + "% MQ>" + String(getMqAlertThreshold()) + "\n";
+  s += "== CONFIGURACION ==\n";
+  s += "Etapa: " + stageToString(stage) + "\n";
+  s += "Maceta: " + String(potL, 1) + " L   " + String(stageMl, 0) + " mL/riego\n";
+  s += "Suelo: min " + String(getSoilThreshold()) + "%   max " + String(getSoilHighThreshold()) + "%\n";
+  s += "mL/L: PL=" + String(getMlPerLiterForStage(PLANTULA));
+  s += " VEG=" + String(getMlPerLiterForStage(VEGETATIVO));
+  s += " PRE=" + String(getMlPerLiterForStage(PRE_FLORACION));
+  s += " FLO=" + String(getMlPerLiterForStage(FLORACION));
+  s += " FIN=" + String(getMlPerLiterForStage(FINAL)) + "\n";
+  s += "Alertas:\n";
+  s += "  Temp > " + String(getTempAlertThreshold()) + "C\n";
+  s += "  HR: " + String(getRhLowAlertThreshold()) + "% - " + String(getRhHighAlertThreshold()) + "%\n";
+  s += "  Aire > " + String(getMqAlertThreshold()) + "\n";
   s += "Hora: " + now;
   return s;
 }
@@ -687,20 +728,19 @@ String formatConfig() {
 String commandHelp() {
   String h;
   h += "== Uso diario ==\n";
-  h += "estado - Ver estado\n";
+  h += "estado - Estado actual\n";
   h += "regar [mL] - Riego manual\n";
   h += "autoriego [on|off] - Riego automatico\n";
   h += "vent [0-100] - Ventilador manual\n";
   h += "ventauto [on|off] - Ventilador automatico\n";
-  h += "reportes [on|off] [min]\n";
+  h += "reportes [on|off] [min] [compacto|completo]\n";
   h += "\n== Configuracion ==\n";
-  h += "config - Ver configuracion\n";
+  h += "config/ajustes - Ver ajustes\n";
   h += "etapa [pl|veg|pre|flo|fin]\n";
   h += "maceta [litros]\n";
   h += "ml [etapa] [valor]\n";
   h += "luz [etapa] [horas]\n";
   h += "led [on|off|0-100] - LED morado manual (respeta horario)\n";
-  h += "pausariego [dias]\n";
   h += "suelomin [%] / suelomax [%]\n";
   h += "calsuelo [SECO] [HUMEDO]\n";
   h += "timezone [offset]\n";
@@ -733,10 +773,10 @@ String handleCommand(const String &chatId, const String &raw) {
   }
 
   if (cmd == "estado" || cmd == "status") {
-    return formatStatus();
+    return formatStatusFull();
   }
 
-  if (cmd == "config" || cmd == "conf") {
+  if (cmd == "config" || cmd == "conf" || cmd == "ajustes") {
     return formatConfig();
   }
 
@@ -777,20 +817,35 @@ String handleCommand(const String &chatId, const String &raw) {
 
   if (cmd == "reportes") {
     if (args.isEmpty()) {
-      return String("Reportes ") + (getAutoReadingsEnabled() ? "ON" : "OFF") +
-             " cada " + String(getAutoReadingsIntervalMs() / 60000) + " min";
+      return String("Reportes: ") + (getAutoReadingsEnabled() ? "ON" : "OFF") +
+             " | " + String(getAutoReadingsIntervalMs() / 60000) + " min" +
+             " | Modo: " + (getReportCompact() ? "compacto" : "completo");
     }
-    int sp2 = args.indexOf(' ');
-    String onoff = sp2 == -1 ? args : args.substring(0, sp2);
-    bool enabled = parseOnOff(onoff);
+    // Cambio de modo solamente: "reportes compacto" / "reportes completo"
+    String al = args; al.toLowerCase(); al.trim();
+    if (al == "compacto") { setReportCompact(true);  return "Reportes modo: compacto (smartwatch)"; }
+    if (al == "completo") { setReportCompact(false); return "Reportes modo: completo"; }
+
+    // Parsear: <on|off> [<minutos>] [<compacto|completo>]
+    bool enabled = parseOnOff(args);
     unsigned long interval = getAutoReadingsIntervalMs();
-    if (sp2 > 0) {
-      int mins = args.substring(sp2 + 1).toInt();
-      if (mins > 0) interval = mins * 60000UL;
+    bool compact = getReportCompact();
+    int sp2 = args.indexOf(' ');
+    while (sp2 >= 0) {
+      int sp3 = args.indexOf(' ', sp2 + 1);
+      String tok = sp3 == -1 ? args.substring(sp2 + 1) : args.substring(sp2 + 1, sp3);
+      tok.trim();
+      String tokL = tok; tokL.toLowerCase();
+      if      (tokL == "compacto") compact = true;
+      else if (tokL == "completo") compact = false;
+      else if (tok.toInt() > 0)   interval = tok.toInt() * 60000UL;
+      sp2 = sp3;
     }
+    setReportCompact(compact);
     setAutoReadings(enabled, interval);
-    return String("Reportes ") + (enabled ? "activados" : "desactivados") +
-           " cada " + String(interval / 60000) + " min";
+    return String("Reportes ") + (enabled ? "ON" : "OFF") +
+           " | " + String(interval / 60000) + " min" +
+           " | Modo: " + (compact ? "compacto" : "completo");
   }
 
   // --- Configuración ---
@@ -853,13 +908,6 @@ String handleCommand(const String &chatId, const String &raw) {
     ledManual = parseOnOff(args);
     applyLightSchedule();
     return String("LED morado: ") + (ledManual ? "ON manual (sigue horario)" : "auto por etapa");
-  }
-
-  if (cmd == "pausariego") {
-    int days = args.toInt();
-    if (days <= 0) return "Uso: pausariego [dias]";
-    if (!setIrrigationIntervalDays(days)) return "Rango: 1-5 dias";
-    return "Intervalo riego: " + String(days) + " dias";
   }
 
   if (cmd == "suelomin") {
@@ -1411,7 +1459,8 @@ void sendPeriodicReport() {
                   (!authorizedChatIds.empty() ? authorizedChatIds.front() : String(""));
   if (target.isEmpty()) return;
 
-  telegramBot->sendMessage(target, formatStatus(), "");
+  String msg = getReportCompact() ? formatStatusCompact() : formatStatusFull();
+  telegramBot->sendMessage(target, msg, "");
 }
 
 // =========================================================

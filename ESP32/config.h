@@ -25,7 +25,6 @@ float getPumpFlow();
 bool isPumpCalibrated();
 int getSoilThreshold();
 int getSoilHighThreshold();
-int getIrrigationIntervalDays();
 unsigned long getLastIrrigationEpoch();
 bool getAutoIrrigationStored();
 
@@ -48,7 +47,6 @@ bool setPumpFlow(float mlPerSecond);
 void setPumpCalibrated(bool calibrated);
 bool setSoilThreshold(int threshold);
 bool setSoilHighThreshold(int threshold);
-bool setIrrigationIntervalDays(int days);
 void setLastIrrigationEpoch(unsigned long epochSeconds);
 void setAutoIrrigationStored(bool enabled);
 bool setLightHoursForStage(plantStage stage, int hours);
@@ -65,3 +63,7 @@ void setTimezoneOffsetHours(int offset);
 // --- LED morado ---
 int  getLedIntensity();
 bool setLedIntensity(int pct);  // rango 1-100
+
+// --- Modo de reporte periodico ---
+bool getReportCompact();
+void setReportCompact(bool compact);
