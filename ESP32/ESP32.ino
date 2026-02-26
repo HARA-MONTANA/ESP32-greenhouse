@@ -49,6 +49,21 @@ String botName;
 // No se persiste en NVS: vuelve a false en cada reboot (seguridad por defecto).
 bool enrollmentOpen = false;
 
+// Suscriptores de reportes periodicos (RAM, no persiste en NVS).
+// Cada usuario elige con "reportes on/off" si quiere recibirlos.
+// El intervalo y formato son globales (NVS); solo la suscripcion es per-user.
+std::vector<String> reportSubscribers;
+
+bool isReportSubscriber(const String &id) {
+  for (const auto &s : reportSubscribers) if (s == id) return true;
+  return false;
+}
+void subscribeReport(const String &id)   { if (!isReportSubscriber(id)) reportSubscribers.push_back(id); }
+void unsubscribeReport(const String &id) {
+  for (auto it = reportSubscribers.begin(); it != reportSubscribers.end(); ++it)
+    if (*it == id) { reportSubscribers.erase(it); return; }
+}
+
 // RTC
 RTC_DS3231 rtc;
 bool rtcReady = false;
@@ -820,14 +835,15 @@ String handleCommand(const String &chatId, const String &raw) {
   }
 
   if (cmd == "reportes") {
+    bool sub = !chatId.isEmpty() && isReportSubscriber(chatId);
     if (args.isEmpty()) {
-      return String("Reportes: ") + (getAutoReadingsEnabled() ? "ON" : "OFF") +
-             " | " + String(getAutoReadingsIntervalMs() / 60000) + " min" +
-             " | Modo: " + (getReportCompact() ? "compacto" : "completo");
+      return String("Reportes: ") + String(getAutoReadingsIntervalMs() / 60000) + " min" +
+             " | Modo: " + (getReportCompact() ? "compacto" : "completo") +
+             "\nTu suscripcion: " + (sub ? "ON" : "OFF");
     }
     String al = args; al.toLowerCase(); al.trim();
-    if (al == "compacto") { setReportCompact(true);  return "Reportes modo: compacto"; }
-    if (al == "completo") { setReportCompact(false); return "Reportes modo: completo"; }
+    if (al == "compacto") { setReportCompact(true);  return "Modo global: compacto"; }
+    if (al == "completo") { setReportCompact(false); return "Modo global: completo"; }
 
     // Parsear: <on|off> [<minutos>] [<compacto|completo>]
     bool enabled = parseOnOff(args);
@@ -845,9 +861,13 @@ String handleCommand(const String &chatId, const String &raw) {
       sp2 = sp3;
     }
     setReportCompact(compact);
-    setAutoReadings(enabled, interval);
-    return String("Reportes ") + (enabled ? "ON" : "OFF") +
-           " | " + String(interval / 60000) + " min" +
+    setAutoReadings(true, interval);  // guarda intervalo/formato en NVS
+    if (!chatId.isEmpty()) {
+      if (enabled) subscribeReport(chatId);
+      else         unsubscribeReport(chatId);
+    }
+    return String("Tus reportes: ") + (enabled ? "ON" : "OFF") +
+           " | Intervalo global: " + String(interval / 60000) + " min" +
            " | Modo: " + (compact ? "compacto" : "completo");
   }
 
@@ -1469,13 +1489,13 @@ void pollTelegram() {
 }
 
 void sendPeriodicReport() {
-  if (!telegramEnabled || !getAutoReadingsEnabled() || !telegramBot) return;
+  if (!telegramEnabled || !telegramBot || reportSubscribers.empty()) return;
   unsigned long now = millis();
   if (now - lastReportMs < getAutoReadingsIntervalMs()) return;
   lastReportMs = now;
   String msg = getReportCompact() ? formatStatusCompact() : formatStatusFull();
-  for (const auto &id : authorizedChatIds) {
-    telegramBot->sendMessage(id, msg, "");
+  for (const auto &id : reportSubscribers) {
+    if (isChatAuthorized(id)) telegramBot->sendMessage(id, msg, "");
   }
 }
 
