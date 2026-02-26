@@ -220,7 +220,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('temp',this)"><span>&#127777; Temperatura</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-temp" style="display:none"><svg id="spk-temp" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:280px;background:rgba(122,4,235,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-temp" style="display:none"><svg id="spk-temp" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:160px;background:rgba(122,4,235,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-rh">
@@ -233,7 +233,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('rh',this)"><span>&#128167; Humedad</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-rh" style="display:none"><svg id="spk-rh" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:280px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-rh" style="display:none"><svg id="spk-rh" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:160px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-soil">
@@ -246,7 +246,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('soil',this)"><span>&#127807; Suelo</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-soil" style="display:none"><svg id="spk-soil" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:280px;background:rgba(57,255,20,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-soil" style="display:none"><svg id="spk-soil" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:160px;background:rgba(57,255,20,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-mq">
@@ -259,20 +259,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('mq',this)"><span>&#127787; Aire MQ</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-mq" style="display:none"><svg id="spk-mq" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:280px;background:rgba(254,117,254,.06);border-radius:4px;display:block"></svg></div>
-    </div>
-
-    <div class="card s-card" id="card-soil-raw">
-      <div class="gauge-wrap">
-        <svg viewBox="0 0 120 72" xmlns="http://www.w3.org/2000/svg">
-          <path d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#1a0840" stroke-width="9" stroke-linecap="round"/>
-          <path id="arc-soil-raw" d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#ff8c00" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset .6s,stroke .4s"/>
-          <text x="60" y="62" text-anchor="middle" fill="#e8d5ff" font-size="19" font-weight="bold" id="txt-soil-raw" font-family="Courier New">--</text>
-          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">ADC</text>
-        </svg>
-      </div>
-      <div class="gauge-label" onclick="toggleSpk('soil-raw',this)"><span>&#127807; Suelo RAW</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-soil-raw" style="display:none"><svg id="spk-soil-raw" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:280px;background:rgba(255,140,0,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-mq" style="display:none"><svg id="spk-mq" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:160px;background:rgba(254,117,254,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-fan-rpm">
@@ -285,7 +272,20 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label" onclick="toggleSpk('fan-rpm',this)"><span>&#127744; Fan RPM</span><span class="spk-arrow">&#9656;</span></div>
-      <div class="spk-wrap" id="spk-wrap-fan-rpm" style="display:none"><svg id="spk-fan-rpm" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:280px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
+      <div class="spk-wrap" id="spk-wrap-fan-rpm" style="display:none"><svg id="spk-fan-rpm" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:160px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
+    </div>
+
+    <div class="card s-card" id="card-soil-raw">
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 120 72" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#1a0840" stroke-width="9" stroke-linecap="round"/>
+          <path id="arc-soil-raw" d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#ff8c00" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset .6s,stroke .4s"/>
+          <text x="60" y="62" text-anchor="middle" fill="#e8d5ff" font-size="19" font-weight="bold" id="txt-soil-raw" font-family="Courier New">--</text>
+          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">ADC</text>
+        </svg>
+      </div>
+      <div class="gauge-label" onclick="toggleSpk('soil-raw',this)"><span>&#127807; Suelo RAW</span><span class="spk-arrow">&#9656;</span></div>
+      <div class="spk-wrap" id="spk-wrap-soil-raw" style="display:none"><svg id="spk-soil-raw" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:160px;background:rgba(255,140,0,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
   </div><!-- /sensor-grid -->
@@ -661,7 +661,7 @@ function gauge(id,val,mn,mx,wL,wH){
   var p=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));
   arc.style.strokeDashoffset=ARC*(1-p);
   txt.textContent=(val%1!==0)?val.toFixed(1):val;
-  arc.style.stroke=(val>=wH)?'#ff124f':(val>=wL)?'#ff8c00':'#39ff14';
+  arc.style.stroke=spkColor[id]||'#39ff14';
 }
 
 // ── Clock
