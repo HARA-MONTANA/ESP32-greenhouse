@@ -1799,13 +1799,14 @@ void setup() {
         if (s.isEmpty()) Serial.println("Debes ingresar un SSID. Enter no es valido aqui.");
       } while (s.isEmpty());
       wifiSsid = s;
-      // Password: Enter acepta la contrasena actual (util si la red nueva
-      // comparte contrasena, o para redes abiertas dejando el campo vacio).
-      Serial.print("WiFi Password [");
-      Serial.print(wifiPassword.isEmpty() ? "vacio" : "****");
-      Serial.println("] (Enter para mantener):");
-      String p = readLineFromSerial("> ");
-      if (!p.isEmpty()) wifiPassword = p;
+      // Password: tambien obligatorio; Enter rechazado igual que el SSID.
+      String p;
+      do {
+        Serial.println("WiFi Password:");
+        p = readLineFromSerial("> ");
+        if (p.isEmpty()) Serial.println("Debes ingresar una contrasena. Enter no es valido aqui.");
+      } while (p.isEmpty());
+      wifiPassword = p;
     }
   }
 
