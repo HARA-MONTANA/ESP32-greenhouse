@@ -7,7 +7,6 @@
 #include <time.h>
 #include <Preferences.h>
 #include <vector>
-#include <map>
 #include <DHT.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
@@ -49,16 +48,6 @@ String botName;
 // Inscripcion abierta: si true, el proximo chat desconocido se auto-agrega.
 // No se persiste en NVS: vuelve a false en cada reboot (seguridad por defecto).
 bool enrollmentOpen = false;
-
-// Estado de reportes periodicos por usuario (RAM, no persiste en NVS).
-// Cada entrada se crea la primera vez que el usuario usa el comando "reportes".
-struct UserReport {
-  bool enabled     = false;
-  unsigned long intervalMs = 30UL * 60 * 1000;  // 30 min por defecto
-  bool compact     = true;
-  unsigned long lastMs = 0;
-};
-std::map<String, UserReport> userReports;
 
 // RTC
 RTC_DS3231 rtc;
@@ -119,6 +108,7 @@ unsigned long lastLightMs = 0;
 unsigned long lastFanMs = 0;
 unsigned long lastSoilMs = 0;
 unsigned long lastTelegramMs = 0;
+unsigned long lastReportMs = 0;
 time_t nextSdLogEpoch = 0;   // epoch del próximo log alineado al reloj; 0 = no inicializado
 
 // Web dashboard
@@ -830,33 +820,35 @@ String handleCommand(const String &chatId, const String &raw) {
   }
 
   if (cmd == "reportes") {
-    if (chatId.isEmpty()) return "Reportes solo disponibles via Telegram.";
-    UserReport &ur = userReports[chatId];
     if (args.isEmpty()) {
-      return String("Tus reportes: ") + (ur.enabled ? "ON" : "OFF") +
-             " | " + String(ur.intervalMs / 60000) + " min" +
-             " | Modo: " + (ur.compact ? "compacto" : "completo");
+      return String("Reportes: ") + (getAutoReadingsEnabled() ? "ON" : "OFF") +
+             " | " + String(getAutoReadingsIntervalMs() / 60000) + " min" +
+             " | Modo: " + (getReportCompact() ? "compacto" : "completo");
     }
     String al = args; al.toLowerCase(); al.trim();
-    if (al == "compacto") { ur.compact = true;  return "Modo: compacto."; }
-    if (al == "completo") { ur.compact = false; return "Modo: completo."; }
+    if (al == "compacto") { setReportCompact(true);  return "Reportes modo: compacto"; }
+    if (al == "completo") { setReportCompact(false); return "Reportes modo: completo"; }
 
     // Parsear: <on|off> [<minutos>] [<compacto|completo>]
-    ur.enabled = parseOnOff(args);
+    bool enabled = parseOnOff(args);
+    unsigned long interval = getAutoReadingsIntervalMs();
+    bool compact = getReportCompact();
     int sp2 = args.indexOf(' ');
     while (sp2 >= 0) {
       int sp3 = args.indexOf(' ', sp2 + 1);
       String tok = sp3 == -1 ? args.substring(sp2 + 1) : args.substring(sp2 + 1, sp3);
       tok.trim();
       String tokL = tok; tokL.toLowerCase();
-      if      (tokL == "compacto") ur.compact = true;
-      else if (tokL == "completo") ur.compact = false;
-      else if (tok.toInt() > 0)   ur.intervalMs = max((unsigned long)(tok.toInt() * 60000UL), 60000UL);
+      if      (tokL == "compacto") compact = true;
+      else if (tokL == "completo") compact = false;
+      else if (tok.toInt() > 0)   interval = tok.toInt() * 60000UL;
       sp2 = sp3;
     }
-    return String("Tus reportes ") + (ur.enabled ? "ON" : "OFF") +
-           " | " + String(ur.intervalMs / 60000) + " min" +
-           " | Modo: " + (ur.compact ? "compacto" : "completo");
+    setReportCompact(compact);
+    setAutoReadings(enabled, interval);
+    return String("Reportes ") + (enabled ? "ON" : "OFF") +
+           " | " + String(interval / 60000) + " min" +
+           " | Modo: " + (compact ? "compacto" : "completo");
   }
 
   // --- Configuración ---
@@ -1477,16 +1469,13 @@ void pollTelegram() {
 }
 
 void sendPeriodicReport() {
-  if (!telegramEnabled || !telegramBot || WiFi.status() != WL_CONNECTED) return;
+  if (!telegramEnabled || !getAutoReadingsEnabled() || !telegramBot) return;
   unsigned long now = millis();
-  for (auto &kv : userReports) {
-    UserReport &ur = kv.second;
-    if (!ur.enabled) continue;
-    if (!isChatAuthorized(kv.first)) continue;  // skip si fue removido con delid
-    if (now - ur.lastMs < ur.intervalMs) continue;
-    ur.lastMs = now;
-    String msg = ur.compact ? formatStatusCompact() : formatStatusFull();
-    telegramBot->sendMessage(kv.first, msg, "");
+  if (now - lastReportMs < getAutoReadingsIntervalMs()) return;
+  lastReportMs = now;
+  String msg = getReportCompact() ? formatStatusCompact() : formatStatusFull();
+  for (const auto &id : authorizedChatIds) {
+    telegramBot->sendMessage(id, msg, "");
   }
 }
 
