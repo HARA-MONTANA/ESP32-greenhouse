@@ -126,7 +126,7 @@ time_t nextSdLogEpoch = 0;   // epoch del próximo log alineado al reloj; 0 = no
 // WiFi Modem Sleep — ahorra ~50-120mA durmiendo el radio entre polls de Telegram.
 // Sensores, riego, luces y fan siguen activos (usan timers locales + RTC).
 bool  wifiSleepMode      = false;               // false = operacion normal; true = sleep activo
-unsigned long wifiSleepPollMs = 5UL * 60 * 1000; // Intervalo de poll en sleep mode (def: 5 min)
+unsigned long wifiSleepPollMs = 10000UL; // Intervalo de poll en sleep mode (10 s)
 bool  wifiPsSleeping     = false;               // true si el modem esta en power-save ahora
 
 // Web dashboard
