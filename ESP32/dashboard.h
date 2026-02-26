@@ -166,6 +166,8 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 .cfg-unlock:hover{color:var(--c2);border-color:var(--c2)}
 .cfg-divider{border:none;border-top:1px solid var(--border);margin:13px 0 10px}
 .ml-tbl input{width:100%}
+/* Garantiza que [hidden] siempre gane sobre cualquier display CSS */
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
@@ -187,7 +189,11 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
     <a id="tg-link" href="#" target="_blank" rel="noopener"
       style="display:none;align-items:center;gap:4px;background:rgba(0,172,238,.18);
              border:1px solid #00acee66;color:#00acee;padding:4px 9px;border-radius:5px;
-             font-size:.72rem;white-space:nowrap;text-decoration:none">&#9992; Abrir chat</a>
+             font-size:.72rem;white-space:nowrap;text-decoration:none">&#9992; @bot</a>
+    <button id="tg-edit-btn" onclick="editBotNameHdr()" title="Editar nombre del bot"
+      style="display:none;background:rgba(0,172,238,.08);border:1px solid #00acee44;
+             color:#00acee;padding:3px 7px;border-radius:5px;font-size:.72rem;
+             cursor:pointer;font-family:inherit">&#9998;</button>
   </div>
   <div class="hdr-right">
     <span id="ip-lbl"></span>
@@ -906,20 +912,34 @@ function saveTelegram(){
     }).catch(function(){alert('Error al guardar Telegram.')});
 }
 function updateBotLink(name){
-  var clean=name.replace('@','');
+  var clean=name?name.replace('@',''):'';
+  var inp=document.getElementById('bot-name-hdr');
   var lnk=document.getElementById('tg-link');
+  var edt=document.getElementById('tg-edit-btn');
   if(!lnk)return;
   if(clean){
     lnk.href='https://t.me/'+clean;
+    lnk.innerHTML='&#9992; @'+clean;
     lnk.style.display='flex';
+    if(inp)inp.style.display='none';
+    if(edt)edt.style.display='inline-block';
   } else {
     lnk.style.display='none';
+    if(inp)inp.style.display='';
+    if(edt)edt.style.display='none';
   }
+}
+function editBotNameHdr(){
+  var inp=document.getElementById('bot-name-hdr');
+  var lnk=document.getElementById('tg-link');
+  var edt=document.getElementById('tg-edit-btn');
+  if(inp){inp.style.display='';inp.focus();}
+  if(lnk)lnk.style.display='none';
+  if(edt)edt.style.display='none';
 }
 function onBotNameInput(val){
   var inp=document.getElementById('bot-name-hdr');
   if(inp)inp._dirty=true;
-  updateBotLink(val);
 }
 function saveBotNameHdr(val){
   var nm=val.trim();
@@ -930,6 +950,7 @@ function saveBotNameHdr(val){
       if(res.ok){
         var inp=document.getElementById('bot-name-hdr');
         if(inp)inp._dirty=false;
+        updateBotLink(nm);
         // sincronizar con campo de config si esta abierto
         sv('tg-name',nm);
         var pl=document.getElementById('tg-prev-lnk');
