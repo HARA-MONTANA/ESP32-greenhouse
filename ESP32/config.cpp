@@ -100,7 +100,7 @@ void configInit() {
   mqAlertThreshold = max(prefs.getInt("mqTh", mqAlertThreshold), 1);
 
   autoReadingsEnabled = prefs.getBool("autoRpt", autoReadingsEnabled);
-  autoReadingsIntervalMs = max(prefs.getUInt("autoInt", autoReadingsIntervalMs), 60000UL);
+  autoReadingsIntervalMs = max((unsigned long)prefs.getUInt("autoInt", (uint32_t)autoReadingsIntervalMs), 60000UL);
 
   timezoneOffsetHours = constrain(prefs.getInt("tzOff", timezoneOffsetHours), -12, 14);
   ledIntensity = constrain(prefs.getInt("led_int", ledIntensity), 1, 100);
