@@ -668,6 +668,18 @@ setInterval(function(){
   document.getElementById('clock').textContent=hh+':'+mm+':'+ss;
 },1000);
 
+// ── Live chart scroll — redraw visible sparklines every 5 s so the
+//    time axis advances in real time even between sensor readings
+setInterval(function(){
+  var keys=['temp','rh','soil','mq','soil-raw','fan-rpm'];
+  keys.forEach(function(k){
+    var wrap=document.getElementById('spk-wrap-'+k);
+    if(wrap&&wrap.style.display!=='none')drawSpk(k);
+  });
+  var rpmWrap=document.getElementById('rpm-chart');
+  if(rpmWrap)drawRpmChart();
+},5000);
+
 // ── Tabs
 function showTab(name){
   ['dashboard','logs','config'].forEach(function(t){
@@ -979,7 +991,7 @@ function drawRpmChart(){
   var VW=240,VH=72,ML=28,MR=6,MT=5,MB=16;
   var PW=VW-ML-MR,PH=VH-MT-MB;
   var col='#00e5ff';
-  var now=rpmHist[rpmHist.length-1].t;
+  var now=Date.now();
   var tMin=now-SPK_WIN;
   var vals=rpmHist.map(function(p){return p.v;});
   var mn=0,mx=Math.max.apply(null,vals);
@@ -1039,7 +1051,7 @@ function drawSpk(key){
   var VW=240,VH=72,ML=28,MR=6,MT=5,MB=16;
   var PW=VW-ML-MR,PH=VH-MT-MB;
   var col=spkColor[key]||'#7a04eb';
-  var now=h[h.length-1].t;
+  var now=Date.now();
   var tMin=now-SPK_WIN;
   var vals=h.map(function(p){return p.v;});
   var mn=Math.min.apply(null,vals);
