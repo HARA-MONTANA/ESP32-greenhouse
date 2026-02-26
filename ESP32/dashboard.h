@@ -54,7 +54,10 @@ main{max-width:1200px;margin:0 auto;padding:var(--gap)}
 @keyframes pulse-alert{0%,100%{box-shadow:0 0 16px #ff124f44}50%{box-shadow:0 0 28px #ff124faa}}
 .gauge-wrap{position:relative;width:100%;padding-top:58%;margin-bottom:6px}
 .gauge-wrap svg{position:absolute;top:0;left:0;width:100%;height:100%}
-.gauge-label{font-size:.76rem;color:var(--text2)}
+.gauge-label{font-size:.76rem;color:var(--text2);display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+.spk-arrow{font-size:.65rem;color:var(--text2);opacity:.6;transition:transform .2s}
+.spk-arrow.open{transform:rotate(90deg)}
+.spk-wrap{overflow:hidden;margin-top:5px}
 /* Mid row */
 #mid-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);margin-bottom:var(--gap)}
 @media(max-width:680px){#mid-row{grid-template-columns:1fr}}
@@ -210,8 +213,8 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
           <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">C</text>
         </svg>
       </div>
-      <div class="gauge-label">&#127777; Temperatura</div>
-      <svg id="spk-temp" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(122,4,235,.06);border-radius:4px;display:block;margin-top:5px"></svg>
+      <div class="gauge-label" onclick="toggleSpk('temp',this)"><span>&#127777; Temperatura</span><span class="spk-arrow">&#9656;</span></div>
+      <div class="spk-wrap" id="spk-wrap-temp" style="display:none"><svg id="spk-temp" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(122,4,235,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-rh">
@@ -223,8 +226,8 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
           <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">%</text>
         </svg>
       </div>
-      <div class="gauge-label">&#128167; Humedad</div>
-      <svg id="spk-rh" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(0,229,255,.06);border-radius:4px;display:block;margin-top:5px"></svg>
+      <div class="gauge-label" onclick="toggleSpk('rh',this)"><span>&#128167; Humedad</span><span class="spk-arrow">&#9656;</span></div>
+      <div class="spk-wrap" id="spk-wrap-rh" style="display:none"><svg id="spk-rh" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-soil">
@@ -236,8 +239,8 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
           <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">%</text>
         </svg>
       </div>
-      <div class="gauge-label">&#127807; Suelo</div>
-      <svg id="spk-soil" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(57,255,20,.06);border-radius:4px;display:block;margin-top:5px"></svg>
+      <div class="gauge-label" onclick="toggleSpk('soil',this)"><span>&#127807; Suelo</span><span class="spk-arrow">&#9656;</span></div>
+      <div class="spk-wrap" id="spk-wrap-soil" style="display:none"><svg id="spk-soil" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(57,255,20,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-mq">
@@ -249,8 +252,8 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
           <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">raw</text>
         </svg>
       </div>
-      <div class="gauge-label">&#127787; Aire MQ</div>
-      <svg id="spk-mq" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(254,117,254,.06);border-radius:4px;display:block;margin-top:5px"></svg>
+      <div class="gauge-label" onclick="toggleSpk('mq',this)"><span>&#127787; Aire MQ</span><span class="spk-arrow">&#9656;</span></div>
+      <div class="spk-wrap" id="spk-wrap-mq" style="display:none"><svg id="spk-mq" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(254,117,254,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-soil-raw">
@@ -262,8 +265,8 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
           <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">ADC</text>
         </svg>
       </div>
-      <div class="gauge-label">&#127807; Suelo RAW</div>
-      <svg id="spk-soil-raw" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(255,140,0,.06);border-radius:4px;display:block;margin-top:5px"></svg>
+      <div class="gauge-label" onclick="toggleSpk('soil-raw',this)"><span>&#127807; Suelo RAW</span><span class="spk-arrow">&#9656;</span></div>
+      <div class="spk-wrap" id="spk-wrap-soil-raw" style="display:none"><svg id="spk-soil-raw" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(255,140,0,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
     <div class="card s-card" id="card-fan-rpm">
@@ -275,8 +278,8 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
           <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">RPM</text>
         </svg>
       </div>
-      <div class="gauge-label">&#127744; Fan RPM</div>
-      <svg id="spk-fan-rpm" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(0,229,255,.06);border-radius:4px;display:block;margin-top:5px"></svg>
+      <div class="gauge-label" onclick="toggleSpk('fan-rpm',this)"><span>&#127744; Fan RPM</span><span class="spk-arrow">&#9656;</span></div>
+      <div class="spk-wrap" id="spk-wrap-fan-rpm" style="display:none"><svg id="spk-fan-rpm" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
   </div><!-- /sensor-grid -->
@@ -982,6 +985,15 @@ function drawRpmChart(){
 }
 
 // ── Sensor sparklines
+function toggleSpk(key,lbl){
+  var wrap=document.getElementById('spk-wrap-'+key);
+  if(!wrap)return;
+  var arrow=lbl.querySelector('.spk-arrow');
+  var opening=wrap.style.display==='none';
+  wrap.style.display=opening?'block':'none';
+  if(arrow)arrow.classList.toggle('open',opening);
+  if(opening)drawSpk(key);
+}
 function pushSpk(key,val){
   var h=spkData[key];
   if(!h)return;
