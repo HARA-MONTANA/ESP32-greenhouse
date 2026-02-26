@@ -35,6 +35,7 @@ bool autoReadingsEnabled = false;
 unsigned long autoReadingsIntervalMs = 300000;
 int timezoneOffsetHours = -5;
 int ledIntensity = 100;
+bool reportCompact = false;
 
 void ensurePrefs() {
   if (!prefsStarted) {
@@ -104,6 +105,7 @@ void configInit() {
 
   timezoneOffsetHours = constrain(prefs.getInt("tzOff", timezoneOffsetHours), -12, 14);
   ledIntensity = constrain(prefs.getInt("led_int", ledIntensity), 1, 100);
+  reportCompact = prefs.getBool("rptCmp", reportCompact);
 }
 
 void configSave() {
@@ -138,6 +140,7 @@ void configSave() {
   prefs.putUInt("autoInt", autoReadingsIntervalMs);
   prefs.putInt("tzOff", timezoneOffsetHours);
   prefs.putInt("led_int", ledIntensity);
+  prefs.putBool("rptCmp", reportCompact);
 }
 
 void configReset() {
@@ -167,6 +170,7 @@ void configReset() {
   autoReadingsIntervalMs = 300000;
   timezoneOffsetHours = -5;
   ledIntensity = 100;
+  reportCompact = false;
   configSave();
 }
 
@@ -367,4 +371,14 @@ bool setLedIntensity(int pct) {
   ensurePrefs();
   prefs.putInt("led_int", ledIntensity);
   return true;
+}
+
+// --- Modo de reporte periodico ---
+
+bool getReportCompact() { return reportCompact; }
+
+void setReportCompact(bool compact) {
+  reportCompact = compact;
+  ensurePrefs();
+  prefs.putBool("rptCmp", reportCompact);
 }

@@ -65,3 +65,7 @@ void setTimezoneOffsetHours(int offset);
 // --- LED morado ---
 int  getLedIntensity();
 bool setLedIntensity(int pct);  // rango 1-100
+
+// --- Modo de reporte periodico ---
+bool getReportCompact();
+void setReportCompact(bool compact);
