@@ -1787,17 +1787,23 @@ void setup() {
     wifiOk = connectWifi();
     if (!wifiOk) {
       Serial.println();
-      Serial.println("[WiFi] Todas las redes fallaron. Ingresa nuevas credenciales.");
-      Serial.println("       Presiona Enter para reintentar con el valor entre [].");
+      Serial.println("[WiFi] Todas las redes fallaron (principal + guardadas).");
+      Serial.println("       Ingresa un SSID diferente. Enter no es valido.");
       Serial.println();
-      Serial.print("WiFi SSID [");
-      Serial.print(wifiSsid);
-      Serial.println("]:");
-      String s = readLineFromSerial("> ");
-      if (!s.isEmpty()) wifiSsid = s;
+      // SSID: obligatorio escribir algo; Enter rechazado porque todas las
+      // redes conocidas ya fueron probadas y fallaron.
+      String s;
+      do {
+        Serial.println("WiFi SSID:");
+        s = readLineFromSerial("> ");
+        if (s.isEmpty()) Serial.println("Debes ingresar un SSID. Enter no es valido aqui.");
+      } while (s.isEmpty());
+      wifiSsid = s;
+      // Password: Enter acepta la contrasena actual (util si la red nueva
+      // comparte contrasena, o para redes abiertas dejando el campo vacio).
       Serial.print("WiFi Password [");
       Serial.print(wifiPassword.isEmpty() ? "vacio" : "****");
-      Serial.println("]:");
+      Serial.println("] (Enter para mantener):");
       String p = readLineFromSerial("> ");
       if (!p.isEmpty()) wifiPassword = p;
     }
