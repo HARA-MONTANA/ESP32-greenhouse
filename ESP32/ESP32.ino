@@ -35,6 +35,11 @@ String storedWifiPassword;
 String storedTelegramToken;
 std::vector<String> authorizedChatIds;
 
+// Redes WiFi guardadas (hasta MAX_WIFI_NETWORKS; solo las que hayan conectado)
+struct WifiNetwork { String ssid; String pass; };
+const int MAX_WIFI_NETWORKS = 5;
+std::vector<WifiNetwork> savedNetworks;
+
 // Botón skip credenciales
 bool skipCredentialPrompt = false;
 bool credentialSkipNotified = false;
@@ -418,6 +423,80 @@ void initWebServer() {
       } else {
         req->send(400, "application/json", "{\"error\":\"invalid json\"}");
       }
+    }
+  );
+
+  // Ruta: listar redes WiFi guardadas (sin contraseñas)
+  webServer.on("/api/wifi", HTTP_GET, [](AsyncWebServerRequest *req) {
+    StaticJsonDocument<320> doc;
+    JsonArray arr = doc.to<JsonArray>();
+    for (int i = 0; i < (int)savedNetworks.size(); i++) {
+      JsonObject o = arr.createNestedObject();
+      o["idx"]  = i;
+      o["ssid"] = savedNetworks[i].ssid;
+    }
+    String json;
+    serializeJson(doc, json);
+    req->send(200, "application/json", json);
+  });
+
+  // Ruta: agregar red WiFi {ssid, pass}
+  webServer.on("/api/wifi/add", HTTP_POST,
+    [](AsyncWebServerRequest *req) {},
+    nullptr,
+    [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t, size_t) {
+      StaticJsonDocument<256> doc;
+      if (deserializeJson(doc, data, len) != DeserializationError::Ok) {
+        req->send(400, "application/json", "{\"error\":\"json invalido\"}"); return;
+      }
+      String ssid = doc["ssid"] | "";
+      String pass = doc["pass"] | "";
+      if (ssid.isEmpty()) {
+        req->send(400, "application/json", "{\"error\":\"ssid requerido\"}"); return;
+      }
+      if (!addSavedNetwork(ssid, pass)) {
+        req->send(409, "application/json", "{\"error\":\"lista llena (max 5)\"}"); return;
+      }
+      req->send(200, "application/json", "{\"ok\":true}");
+    }
+  );
+
+  // Ruta: eliminar red WiFi {idx}
+  webServer.on("/api/wifi/del", HTTP_POST,
+    [](AsyncWebServerRequest *req) {},
+    nullptr,
+    [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t, size_t) {
+      StaticJsonDocument<64> doc;
+      if (deserializeJson(doc, data, len) != DeserializationError::Ok) {
+        req->send(400, "application/json", "{\"error\":\"json invalido\"}"); return;
+      }
+      int idx = doc["idx"] | -1;
+      if (!deleteSavedNetworkAt(idx)) {
+        req->send(404, "application/json", "{\"error\":\"indice invalido\"}"); return;
+      }
+      req->send(200, "application/json", "{\"ok\":true}");
+    }
+  );
+
+  // Ruta: editar red WiFi existente {idx, ssid, pass}
+  webServer.on("/api/wifi/edit", HTTP_POST,
+    [](AsyncWebServerRequest *req) {},
+    nullptr,
+    [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t, size_t) {
+      StaticJsonDocument<256> doc;
+      if (deserializeJson(doc, data, len) != DeserializationError::Ok) {
+        req->send(400, "application/json", "{\"error\":\"json invalido\"}"); return;
+      }
+      int idx     = doc["idx"]  | -1;
+      String ssid = doc["ssid"] | "";
+      String pass = doc["pass"] | "";
+      if (idx < 0 || idx >= (int)savedNetworks.size() || ssid.isEmpty()) {
+        req->send(400, "application/json", "{\"error\":\"datos invalidos\"}"); return;
+      }
+      savedNetworks[idx].ssid = ssid;
+      savedNetworks[idx].pass = pass;
+      saveSavedNetworks();
+      req->send(200, "application/json", "{\"ok\":true}");
     }
   );
 
@@ -1114,6 +1193,7 @@ void loadStoredCredentials() {
     if (!id.isEmpty()) authorizedChatIds.push_back(id);
     start = comma + 1;
   }
+  loadSavedNetworks();
 }
 
 bool hasStoredCredentials() {
@@ -1140,6 +1220,62 @@ void persistChatIds() {
     s += authorizedChatIds[i];
   }
   credStore.putString("ids", s);
+}
+
+// ---- Redes WiFi guardadas ----
+
+void loadSavedNetworks() {
+  savedNetworks.clear();
+  uint8_t n = credStore.getUChar("wn", 0);
+  if (n > MAX_WIFI_NETWORKS) n = MAX_WIFI_NETWORKS;
+  for (uint8_t i = 0; i < n; i++) {
+    char ks[6], kp[6];
+    snprintf(ks, sizeof(ks), "wn%ds", i);
+    snprintf(kp, sizeof(kp), "wn%dp", i);
+    WifiNetwork net;
+    net.ssid = credStore.getString(ks, "");
+    net.pass = credStore.getString(kp, "");
+    if (!net.ssid.isEmpty()) savedNetworks.push_back(net);
+  }
+}
+
+void saveSavedNetworks() {
+  credStore.putUChar("wn", (uint8_t)savedNetworks.size());
+  for (int i = 0; i < (int)savedNetworks.size(); i++) {
+    char ks[6], kp[6];
+    snprintf(ks, sizeof(ks), "wn%ds", i);
+    snprintf(kp, sizeof(kp), "wn%dp", i);
+    credStore.putString(ks, savedNetworks[i].ssid);
+    credStore.putString(kp, savedNetworks[i].pass);
+  }
+  // Limpiar slots sobrantes (tras un delete)
+  for (int i = savedNetworks.size(); i < MAX_WIFI_NETWORKS; i++) {
+    char ks[6], kp[6];
+    snprintf(ks, sizeof(ks), "wn%ds", i);
+    snprintf(kp, sizeof(kp), "wn%dp", i);
+    credStore.remove(ks);
+    credStore.remove(kp);
+  }
+}
+
+// Agrega o actualiza una red en la lista. Retorna false si la lista está llena
+// y la red es nueva.
+bool addSavedNetwork(const String &ssid, const String &pass) {
+  for (auto &net : savedNetworks) {
+    if (net.ssid == ssid) { net.pass = pass; saveSavedNetworks(); return true; }
+  }
+  if ((int)savedNetworks.size() >= MAX_WIFI_NETWORKS) return false;
+  WifiNetwork net; net.ssid = ssid; net.pass = pass;
+  savedNetworks.push_back(net);
+  saveSavedNetworks();
+  return true;
+}
+
+bool deleteSavedNetworkAt(int idx) {
+  if (idx < 0 || idx >= (int)savedNetworks.size()) return false;
+  savedNetworks.erase(savedNetworks.begin() + idx);
+  saveSavedNetworks();
+  return true;
 }
 
 bool isChatAuthorized(const String &chatId) {
@@ -1347,15 +1483,17 @@ int promptTimezoneOffset(int defaultOffset) {
 //  WIFI + NTP + RTC
 // =========================================================
 
-bool connectWifi(unsigned long timeoutMs = 30000) {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
-
-  Serial.print("Conectando WiFi");
-  unsigned long start = millis();
+// Intenta conectar a una red específica con timeout. Deja el WiFi desconectado
+// si falla. Retorna true si se obtiene IP.
+bool tryConnectNet(const String &ssid, const String &pass, unsigned long tMs) {
+  WiFi.disconnect(false);
+  WiFi.begin(ssid.c_str(), pass.c_str());
+  Serial.print("Conectando a " + ssid);
+  unsigned long s = millis();
   while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - start >= timeoutMs) {
+    if (millis() - s >= tMs) {
       Serial.println(" TIMEOUT");
+      WiFi.disconnect(true);
       return false;
     }
     delay(500);
@@ -1363,8 +1501,35 @@ bool connectWifi(unsigned long timeoutMs = 30000) {
   }
   Serial.println(" OK");
   Serial.println("IP: " + WiFi.localIP().toString());
-  saveWifiCredentials(wifiSsid, wifiPassword);
   return true;
+}
+
+bool connectWifi(unsigned long timeoutMs = 30000) {
+  WiFi.mode(WIFI_STA);
+
+  // 1. Intentar la red principal
+  if (tryConnectNet(wifiSsid, wifiPassword, timeoutMs)) {
+    addSavedNetwork(wifiSsid, wifiPassword);
+    saveWifiCredentials(wifiSsid, wifiPassword);
+    return true;
+  }
+
+  // 2. Fallback: probar redes guardadas que hayan funcionado antes
+  if (!savedNetworks.empty()) {
+    Serial.println("Red principal fallo. Probando redes guardadas...");
+    for (auto &net : savedNetworks) {
+      if (net.ssid == wifiSsid) continue;  // ya la intentamos
+      if (tryConnectNet(net.ssid, net.pass, 12000)) {
+        wifiSsid     = net.ssid;
+        wifiPassword = net.pass;
+        addSavedNetwork(wifiSsid, wifiPassword);
+        saveWifiCredentials(wifiSsid, wifiPassword);
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 String tzFromOffset(int off) {
