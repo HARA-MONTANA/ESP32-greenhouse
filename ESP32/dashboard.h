@@ -435,10 +435,6 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         <input type="number" id="cfg-pot" min="1" max="50" value="5">
       </div>
       <div class="cfield">
-        <label>Dias entre riegos</label>
-        <input type="number" id="cfg-pause" min="1" max="5" value="2">
-      </div>
-      <div class="cfield">
         <label>Intensidad LED (%)</label>
         <div class="srow" style="flex:1;margin:0">
           <input type="range" min="1" max="100" id="cfg-led" oninput="document.getElementById('cfg-led-v').textContent=this.value+'%'">
@@ -795,7 +791,7 @@ function loadLogFile(){
 function loadConfig(){
   fetch('/api/config').then(function(r){return r.json()}).then(function(c){
     sv('cfg-stage',c.stage);
-    sv('cfg-pot',c.pot_l);sv('cfg-pause',c.pause_days);
+    sv('cfg-pot',c.pot_l);
     sv('cfg-led',c.led_pct);document.getElementById('cfg-led-v').textContent=c.led_pct+'%';
     sv('ml-pl',c.ml_pl);sv('ml-veg',c.ml_veg);sv('ml-pre',c.ml_pre);sv('ml-flo',c.ml_flo);sv('ml-fin',c.ml_fin);
     sv('cfg-luz-pl',c.luz_pl);document.getElementById('cfg-luz-pl-v').textContent=c.luz_pl+'h';
@@ -914,7 +910,6 @@ function drawRpmChart(){
 // ── Config save helpers
 function savePlanta(btn){
   sc({cmd:'maceta',args:document.getElementById('cfg-pot').value});
-  sc({cmd:'pausariego',args:document.getElementById('cfg-pause').value});
   sc({cmd:'led',args:document.getElementById('cfg-led').value});
   sc({cmd:'ml',args:'pl '+document.getElementById('ml-pl').value});
   sc({cmd:'ml',args:'veg '+document.getElementById('ml-veg').value});

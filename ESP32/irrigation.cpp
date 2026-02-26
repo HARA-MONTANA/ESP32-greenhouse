@@ -70,22 +70,15 @@ bool checkSoilAndIrrigate() {
   tankEmptyNotified = false;
 
   const int highThreshold = getSoilHighThreshold();
-  if (highThreshold > 0 && soilPercent >= highThreshold) {
-    return false;
-  }
-
+  if (highThreshold > 0 && soilPercent >= highThreshold) return false;
   if (soilPercent >= getSoilThreshold()) return false;
 
-  const int intervalDays = max(getIrrigationIntervalDays(), 0);
-  const unsigned long intervalSeconds = static_cast<unsigned long>(intervalDays) * 86400UL;
+  // Cooldown minimo de 15 minutos entre riegos para no ciclar la bomba
   time_t now;
   time(&now);
   const unsigned long lastEpoch = getLastIrrigationEpoch();
-
-  if (intervalSeconds > 0 && now > 0 && lastEpoch > 0) {
-    if (difftime(now, static_cast<time_t>(lastEpoch)) < static_cast<double>(intervalSeconds)) {
-      return false;
-    }
+  if (now > 0 && lastEpoch > 0 && difftime(now, static_cast<time_t>(lastEpoch)) < 900.0) {
+    return false;
   }
 
   irrigate(soilReading);

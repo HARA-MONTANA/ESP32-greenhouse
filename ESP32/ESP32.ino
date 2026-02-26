@@ -353,7 +353,6 @@ void initWebServer() {
     doc["ml_fin"]         = getMlPerLiterForStage(FINAL);
     doc["luz_pl"]         = getLightHoursForStage(PLANTULA);
     doc["luz_veg"]        = getLightHoursForStage(VEGETATIVO);
-    doc["pause_days"]     = getIrrigationIntervalDays();
     doc["led_pct"]        = getLedIntensity();
     doc["soil_min_pct"]   = getSoilThreshold();
     doc["soil_max_pct"]   = getSoilHighThreshold();
@@ -708,7 +707,6 @@ String formatConfig() {
   s += "== CONFIGURACION ==\n";
   s += "Etapa: " + stageToString(stage) + "\n";
   s += "Maceta: " + String(potL, 1) + " L   " + String(stageMl, 0) + " mL/riego\n";
-  s += "Intervalo: cada " + String(getIrrigationIntervalDays()) + " dias\n";
   s += "Suelo: min " + String(getSoilThreshold()) + "%   max " + String(getSoilHighThreshold()) + "%\n";
   s += "mL/L: PL=" + String(getMlPerLiterForStage(PLANTULA));
   s += " VEG=" + String(getMlPerLiterForStage(VEGETATIVO));
@@ -743,7 +741,6 @@ String commandHelp() {
   h += "ml [etapa] [valor]\n";
   h += "luz [etapa] [horas]\n";
   h += "led [on|off|0-100] - LED morado manual (respeta horario)\n";
-  h += "pausariego [dias]\n";
   h += "suelomin [%] / suelomax [%]\n";
   h += "calsuelo [SECO] [HUMEDO]\n";
   h += "timezone [offset]\n";
@@ -911,13 +908,6 @@ String handleCommand(const String &chatId, const String &raw) {
     ledManual = parseOnOff(args);
     applyLightSchedule();
     return String("LED morado: ") + (ledManual ? "ON manual (sigue horario)" : "auto por etapa");
-  }
-
-  if (cmd == "pausariego") {
-    int days = args.toInt();
-    if (days <= 0) return "Uso: pausariego [dias]";
-    if (!setIrrigationIntervalDays(days)) return "Rango: 1-5 dias";
-    return "Intervalo riego: " + String(days) + " dias";
   }
 
   if (cmd == "suelomin") {
