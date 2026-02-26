@@ -16,6 +16,7 @@
 #include "config.h"
 #include "irrigation.h"
 #include "dashboard.h"
+#include <SD.h>
 #include "sdcard.h"
 
 // =========================================================
