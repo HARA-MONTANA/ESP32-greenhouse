@@ -501,7 +501,7 @@ void applyLightSchedule() {
   time_t offTs = startTs + getLightHoursForStage(stage) * 3600L;
 
   bool shouldBeOn    = nowTs >= startTs && nowTs < offTs;
-  bool ledShouldBeOn = shouldBeOn && (stageUsesLeds(stage) || ledManual);
+  bool ledShouldBeOn = shouldBeOn && ledManual;
 
   static bool prevLightOn = false;
   if (shouldBeOn != prevLightOn) {
