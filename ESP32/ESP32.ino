@@ -45,6 +45,9 @@ UniversalTelegramBot *telegramBot = nullptr;
 bool telegramEnabled = false;
 String lastTelegramChatId;
 String botName;
+// Inscripcion abierta: si true, el proximo chat desconocido se auto-agrega.
+// No se persiste en NVS: vuelve a false en cada reboot (seguridad por defecto).
+bool enrollmentOpen = false;
 
 // RTC
 RTC_DS3231 rtc;
@@ -750,6 +753,7 @@ String commandHelp() {
   h += "calibrar - Bomba 5s para medir\n";
   h += "caudal [mL] - Guardar volumen medido\n";
   h += "\n== Admin ==\n";
+  h += "acceso [on|off] - Abrir/cerrar inscripcion (toggle sin argumento)\n";
   h += "addid [ID] / delid [ID] / ids\n";
   h += "reset - Restablecer configuracion";
   return h;
@@ -1018,6 +1022,20 @@ String handleCommand(const String &chatId, const String &raw) {
     return r;
   }
 
+  if (cmd == "acceso") {
+    if (authorizedChatIds.size() >= 5) return "Maximo de IDs alcanzado (5). Elimina uno con delid antes de abrir acceso.";
+    if (args == "on") {
+      enrollmentOpen = true;
+    } else if (args == "off") {
+      enrollmentOpen = false;
+    } else {
+      enrollmentOpen = !enrollmentOpen;
+    }
+    if (enrollmentOpen)
+      return "Acceso ABIERTO. El proximo chat desconocido que escriba sera agregado y el acceso se cerrara automaticamente.";
+    return "Acceso CERRADO. Solo IDs autorizados pueden interactuar.";
+  }
+
   if (cmd == "reset") {
     logAccion("CMD", "reset de configuracion");
     configReset();
@@ -1086,9 +1104,11 @@ bool isChatAuthorized(const String &chatId) {
 
 bool ensureChatAuthorized(const String &chatId) {
   if (isChatAuthorized(chatId)) return true;
-  if (authorizedChatIds.size() < 4) {
+  if (enrollmentOpen && authorizedChatIds.size() < 5) {
     authorizedChatIds.push_back(chatId);
     persistChatIds();
+    enrollmentOpen = false;  // cierra automaticamente tras agregar uno
+    broadcastMessage("[Acceso] Chat agregado: " + chatId + "\nAcceso cerrado automaticamente.");
     return true;
   }
   return false;
