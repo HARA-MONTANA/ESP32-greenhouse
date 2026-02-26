@@ -34,12 +34,7 @@ nav{display:flex;gap:3px}
 }
 .tab-btn.active{color:var(--c2);border-bottom-color:var(--c2);background:rgba(254,117,254,.07)}
 .tab-btn:hover:not(.active){background:rgba(255,255,255,.04)}
-#tg-link{
-  display:none;align-items:center;gap:4px;
-  background:rgba(0,172,238,.12);border:1px solid #00acee44;
-  color:#00acee;padding:4px 9px;border-radius:5px;font-size:.75rem;
-}
-#tg-link:hover{background:rgba(0,172,238,.22)}
+#tg-link:hover{background:rgba(0,172,238,.32)!important}
 .hdr-right{display:flex;align-items:center;gap:10px;margin-left:auto;font-size:.75rem;color:var(--text2)}
 #ws-dot{width:8px;height:8px;border-radius:50%;background:var(--c4);flex-shrink:0}
 #ws-dot.ok{background:var(--neon)}
@@ -178,9 +173,19 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
   <nav>
     <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button>
     <button class="tab-btn" data-tab="logs" onclick="showTab('logs')">Logs</button>
-    <button class="tab-btn" data-tab="config" onclick="showTab('config')">Config</button>
+    <button class="tab-btn" data-tab="config" onclick="showTab('config')">Configuraci&#243;n</button>
   </nav>
-  <a id="tg-link" href="#" target="_blank" rel="noopener">&#129302; Bot</a>
+  <div id="bot-name-wrap" style="display:flex;align-items:center;gap:5px">
+    <input type="text" id="bot-name-hdr" placeholder="@NombreBot"
+      style="background:rgba(0,172,238,.08);border:1px solid #00acee44;color:#00acee;
+             padding:4px 8px;border-radius:5px;font-size:.72rem;font-family:inherit;width:130px"
+      oninput="onBotNameInput(this.value)"
+      onkeydown="if(event.key==='Enter')saveBotNameHdr(this.value)">
+    <a id="tg-link" href="#" target="_blank" rel="noopener"
+      style="display:none;align-items:center;gap:4px;background:rgba(0,172,238,.18);
+             border:1px solid #00acee66;color:#00acee;padding:4px 9px;border-radius:5px;
+             font-size:.72rem;white-space:nowrap;text-decoration:none">&#9992; Abrir chat</a>
+  </div>
   <div class="hdr-right">
     <span id="ip-lbl"></span>
     <span id="clock">--:--:--</span>
@@ -206,6 +211,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label">&#127777; Temperatura</div>
+      <svg id="spk-temp" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(122,4,235,.06);border-radius:4px;display:block;margin-top:5px"></svg>
     </div>
 
     <div class="card s-card" id="card-rh">
@@ -218,6 +224,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label">&#128167; Humedad</div>
+      <svg id="spk-rh" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(0,229,255,.06);border-radius:4px;display:block;margin-top:5px"></svg>
     </div>
 
     <div class="card s-card" id="card-soil">
@@ -230,6 +237,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label">&#127807; Suelo</div>
+      <svg id="spk-soil" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(57,255,20,.06);border-radius:4px;display:block;margin-top:5px"></svg>
     </div>
 
     <div class="card s-card" id="card-mq">
@@ -242,6 +250,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label">&#127787; Aire MQ</div>
+      <svg id="spk-mq" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(254,117,254,.06);border-radius:4px;display:block;margin-top:5px"></svg>
     </div>
 
     <div class="card s-card" id="card-soil-raw">
@@ -254,6 +263,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label">&#127807; Suelo RAW</div>
+      <svg id="spk-soil-raw" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(255,140,0,.06);border-radius:4px;display:block;margin-top:5px"></svg>
     </div>
 
     <div class="card s-card" id="card-fan-rpm">
@@ -266,6 +276,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         </svg>
       </div>
       <div class="gauge-label">&#127744; Fan RPM</div>
+      <svg id="spk-fan-rpm" viewBox="0 0 200 28" preserveAspectRatio="none" style="width:100%;height:28px;background:rgba(0,229,255,.06);border-radius:4px;display:block;margin-top:5px"></svg>
     </div>
 
   </div><!-- /sensor-grid -->
@@ -351,19 +362,6 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         <button class="btn btn-o" onclick="sc({cmd:'regar',args:document.getElementById('irr-ml').value},this)">Regar</button>
       </div>
       <div class="tank" id="tank">&#11036; Tanque: ---</div>
-    </div>
-
-    <!-- Bomba -->
-    <div class="card">
-      <div class="card-title">&#9881; Bomba</div>
-      <div id="pump-st" style="font-size:.76rem;margin-bottom:7px">&#11036; Sin datos</div>
-      <div class="ctrl-row">
-        <button class="btn btn-d" onclick="calPump(this)">Calibrar 5s</button>
-      </div>
-      <div class="irow" style="margin-top:7px">
-        <input type="number" id="caudal-ml" min="1" max="9999" placeholder="mL recolectados">
-        <button class="btn btn-o" onclick="sc({cmd:'caudal',args:document.getElementById('caudal-ml').value},this)">Guardar</button>
-      </div>
     </div>
 
   </div><!-- /actions-section -->
@@ -538,6 +536,25 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
     </div>
   </details>
 
+  <!-- Bomba -->
+  <details class="csec">
+    <summary style="border-left-color:#ff124f">
+      &#9881; Bomba
+      <span class="csec-meta"><span id="cfg-pump-tag2" class="csec-tag" style="background:rgba(255,18,79,.12);color:var(--c4);border-color:#ff124f44">Sin calibrar</span></span>
+    </summary>
+    <div class="cbody">
+      <div id="pump-st" style="font-size:.76rem;margin-bottom:10px">&#11036; Sin datos</div>
+      <p class="cnote">Ejecuta la bomba 5 segundos y mide el agua recolectada para calibrar el caudal.</p>
+      <div class="ctrl-row">
+        <button class="btn btn-d" onclick="calPump(this)">Calibrar 5s</button>
+      </div>
+      <div class="irow" style="margin-top:10px">
+        <input type="number" id="caudal-ml" min="1" max="9999" placeholder="mL recolectados">
+        <button class="btn btn-o" onclick="sc({cmd:'caudal',args:document.getElementById('caudal-ml').value},this)">Guardar caudal</button>
+      </div>
+    </div>
+  </details>
+
   <!-- Sistema (cerrado por defecto) -->
   <details class="csec">
     <summary style="border-left-color:#fe75fe">
@@ -565,7 +582,16 @@ var ws, tsBase=0, tsAt=0, fanAuto=true, autoIrr=true;
 var logIdx={};
 // Umbrales de visualizacion: se sincronizan desde /api/config al abrir Config
 var V={tWarn:32,rhL:40,rhH:70,slL:25,mqW:500};
-// Fan RPM history
+// Sensor sparkline histories
+var SPK_MAX=40;
+var spkData={
+  temp:[],rh:[],soil:[],mq:[],'soil-raw':[],'fan-rpm':[]
+};
+var spkColor={
+  temp:'#7a04eb',rh:'#00e5ff',soil:'#39ff14',mq:'#fe75fe',
+  'soil-raw':'#ff8c00','fan-rpm':'#00e5ff'
+};
+// Fan RPM history (legacy - keep for backward compat)
 var rpmHist=[], RPM_MAX_PTS=40;
 
 // ── WebSocket
@@ -584,9 +610,9 @@ function onWs(d){
   if(d.ts){tsBase=d.ts;tsAt=Date.now()}
   document.getElementById('ip-lbl').textContent=location.hostname;
   if(d.bot_name){
-    var t=document.getElementById('tg-link');
-    t.href='https://t.me/'+d.bot_name.replace('@','');
-    t.style.display='flex';
+    var inp=document.getElementById('bot-name-hdr');
+    if(inp&&!inp._dirty)inp.value=d.bot_name;
+    updateBotLink(d.bot_name);
   }
   gauge('temp',d.temp_c,0,50,V.tWarn-6,V.tWarn);
   gauge('rh',d.rh_pct,0,100,V.rhL,V.rhH);
@@ -597,6 +623,13 @@ function onWs(d){
   // Fan RPM
   if(d.fan_rpm!==undefined){pushRpm(d.fan_rpm)}
   gauge('fan-rpm',d.fan_rpm,0,3000,1500,2500);
+  // Sparklines
+  if(d.temp_c!=null)pushSpk('temp',d.temp_c);
+  if(d.rh_pct!=null)pushSpk('rh',d.rh_pct);
+  if(d.soil_pct!=null)pushSpk('soil',d.soil_pct);
+  if(d.mq_raw!=null)pushSpk('mq',d.mq_raw);
+  if(d.soil_adc!=null)pushSpk('soil-raw',d.soil_adc);
+  if(d.fan_rpm!=null)pushSpk('fan-rpm',d.fan_rpm);
   alrt('card-temp',d.alert_temp);
   alrt('card-rh',d.alert_rh);
   alrt('card-mq',d.alert_mq);
@@ -680,7 +713,7 @@ function syncCtrl(d){
   document.getElementById('tank').textContent=d.tank_ok?'\uD83D\uDFE2 Tanque: OK':'\uD83D\uDD34 Sin agua';
   if(d.pump_calibrated!==undefined){
     var ps=document.getElementById('pump-st');
-    ps.textContent=d.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
+    if(ps)ps.textContent=d.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
     setPumpTag(d.pump_calibrated);
   }
 }
@@ -806,17 +839,21 @@ function loadConfig(){
     if(c.hum_max)V.rhH=c.hum_max;
     if(c.soil_min_pct)V.slL=c.soil_min_pct;
     if(c.mq_max)V.mqW=c.mq_max;
-    // Actualizar chip de bomba en la seccion Suelo y Bomba
-    setPumpTag(c.pump_calibrated);
-    document.getElementById('pump-st').textContent=c.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
     // Actualizar badge de etapa en la seccion Planta
     updateStageTag(c.stage);
+    // Actualizar chip de bomba y estado
+    setPumpTag(c.pump_calibrated);
+    var ps=document.getElementById('pump-st');
+    if(ps)ps.textContent=c.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
     if(c.bot_name){
       sv('tg-name',c.bot_name);
       var pl=document.getElementById('tg-prev-lnk');
       pl.href='https://t.me/'+c.bot_name.replace('@','');
       pl.textContent='t.me/'+c.bot_name.replace('@','');
       document.getElementById('tg-prev').style.display='block';
+      var hi=document.getElementById('bot-name-hdr');
+      if(hi&&!hi._dirty)hi.value=c.bot_name;
+      updateBotLink(c.bot_name);
     }
   }).catch(function(){});
 }
@@ -844,11 +881,46 @@ function saveTelegram(){
           var pl=document.getElementById('tg-prev-lnk');
           pl.href='https://t.me/'+nm.replace('@','');pl.textContent='t.me/'+nm.replace('@','');
           document.getElementById('tg-prev').style.display='block';
-          var tl=document.getElementById('tg-link');tl.href=pl.href;tl.style.display='flex';
+          updateBotLink(nm);
+          var hi=document.getElementById('bot-name-hdr');
+          if(hi){hi.value=nm;hi._dirty=false;}
         }
         alert('Telegram guardado.');
       }
     }).catch(function(){alert('Error al guardar Telegram.')});
+}
+function updateBotLink(name){
+  var clean=name.replace('@','');
+  var lnk=document.getElementById('tg-link');
+  if(!lnk)return;
+  if(clean){
+    lnk.href='https://t.me/'+clean;
+    lnk.style.display='flex';
+  } else {
+    lnk.style.display='none';
+  }
+}
+function onBotNameInput(val){
+  var inp=document.getElementById('bot-name-hdr');
+  if(inp)inp._dirty=true;
+  updateBotLink(val);
+}
+function saveBotNameHdr(val){
+  var nm=val.trim();
+  if(!nm)return;
+  var body={name:nm};
+  fetch('/api/telegram',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json()}).then(function(res){
+      if(res.ok){
+        var inp=document.getElementById('bot-name-hdr');
+        if(inp)inp._dirty=false;
+        // sincronizar con campo de config si esta abierto
+        sv('tg-name',nm);
+        var pl=document.getElementById('tg-prev-lnk');
+        if(pl){pl.href='https://t.me/'+nm.replace('@','');pl.textContent='t.me/'+nm.replace('@','');}
+        document.getElementById('tg-prev').style.display='block';
+      }
+    }).catch(function(){});
 }
 function togglePwd(id,btn){
   var i=document.getElementById(id);
@@ -864,15 +936,17 @@ function updateStageTag(s){
   t.textContent=map[s]||s||'---';
 }
 function setPumpTag(cal){
-  var t=document.getElementById('cfg-pump-tag');
-  if(!t)return;
-  if(cal){
-    t.textContent='Calibrada';
-    t.style.cssText='background:rgba(57,255,20,.12);color:var(--neon);border-color:#39ff1440';
-  } else {
-    t.textContent='Sin calibrar';
-    t.style.cssText='background:rgba(255,18,79,.12);color:var(--c4);border-color:#ff124f44';
-  }
+  ['cfg-pump-tag','cfg-pump-tag2'].forEach(function(id){
+    var t=document.getElementById(id);
+    if(!t)return;
+    if(cal){
+      t.textContent='Calibrada';
+      t.style.cssText='background:rgba(57,255,20,.12);color:var(--neon);border-color:#39ff1440';
+    } else {
+      t.textContent='Sin calibrar';
+      t.style.cssText='background:rgba(255,18,79,.12);color:var(--c4);border-color:#ff124f44';
+    }
+  });
 }
 function unlockAdc(btn){
   var dry=document.getElementById('cfg-adry');
@@ -905,6 +979,37 @@ function drawRpmChart(){
     return x+','+y;
   }).join(' ');
   svg.innerHTML='<polyline points="'+pts+'" fill="none" stroke="#00e5ff" stroke-width="1.5" stroke-linejoin="round"/>';
+}
+
+// ── Sensor sparklines
+function pushSpk(key,val){
+  var h=spkData[key];
+  if(!h)return;
+  h.push(val);
+  if(h.length>SPK_MAX)h.shift();
+  drawSpk(key);
+}
+function drawSpk(key){
+  var svg=document.getElementById('spk-'+key);
+  var h=spkData[key];
+  if(!svg||!h||h.length<2)return;
+  var W=200,H=28;
+  var mn=Math.min.apply(null,h);
+  var mx=Math.max.apply(null,h);
+  if(mx===mn){mn=mn-1;mx=mx+1;}
+  var col=spkColor[key]||'#7a04eb';
+  var n=h.length;
+  var pts=h.map(function(v,i){
+    var x=((i/(SPK_MAX-1))*W).toFixed(1);
+    var y=(H-2-((v-mn)/(mx-mn))*(H-4)).toFixed(1);
+    return x+','+y;
+  }).join(' ');
+  // filled area
+  var first=((0/(SPK_MAX-1))*W).toFixed(1);
+  var last=(((n-1)/(SPK_MAX-1))*W).toFixed(1);
+  svg.innerHTML=
+    '<polygon points="'+first+','+(H-1)+' '+pts+' '+last+','+(H-1)+'" fill="'+col+'" opacity="0.13"/>'+
+    '<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="1.5" stroke-linejoin="round"/>';
 }
 
 // ── Config save helpers
