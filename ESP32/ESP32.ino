@@ -7,6 +7,7 @@
 #include <time.h>
 #include <Preferences.h>
 #include <vector>
+#include <map>
 #include <DHT.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
@@ -45,6 +46,20 @@ UniversalTelegramBot *telegramBot = nullptr;
 bool telegramEnabled = false;
 String lastTelegramChatId;
 String botName;
+// Inscripcion abierta: si true, el proximo chat desconocido se auto-agrega.
+// No se persiste en NVS: vuelve a false en cada reboot (seguridad por defecto).
+bool enrollmentOpen = false;
+
+// Suscriptores de reportes periodicos (RAM, no persiste en NVS).
+// Cada usuario elige con "reportes on/off" si quiere recibirlos,
+// con su propio intervalo y formato. Los comandos del sistema siguen
+// siendo globales; solo la entrega de mensajes es independiente.
+struct ReportSub {
+  unsigned long intervalMs = 30UL * 60 * 1000;  // 30 min por defecto
+  bool          compact    = true;
+  unsigned long lastMs     = 0;
+};
+std::map<String, ReportSub> reportSubscribers;
 
 // RTC
 RTC_DS3231 rtc;
@@ -105,7 +120,6 @@ unsigned long lastLightMs = 0;
 unsigned long lastFanMs = 0;
 unsigned long lastSoilMs = 0;
 unsigned long lastTelegramMs = 0;
-unsigned long lastReportMs = 0;
 time_t nextSdLogEpoch = 0;   // epoch del próximo log alineado al reloj; 0 = no inicializado
 
 // Web dashboard
@@ -750,6 +764,7 @@ String commandHelp() {
   h += "calibrar - Bomba 5s para medir\n";
   h += "caudal [mL] - Guardar volumen medido\n";
   h += "\n== Admin ==\n";
+  h += "acceso [on|off] - Abrir/cerrar inscripcion (toggle sin argumento)\n";
   h += "addid [ID] / delid [ID] / ids\n";
   h += "reset - Restablecer configuracion";
   return h;
@@ -816,36 +831,36 @@ String handleCommand(const String &chatId, const String &raw) {
   }
 
   if (cmd == "reportes") {
+    if (chatId.isEmpty()) return "Reportes solo disponibles via Telegram.";
+    bool sub = reportSubscribers.count(chatId) > 0;
     if (args.isEmpty()) {
-      return String("Reportes: ") + (getAutoReadingsEnabled() ? "ON" : "OFF") +
-             " | " + String(getAutoReadingsIntervalMs() / 60000) + " min" +
-             " | Modo: " + (getReportCompact() ? "compacto" : "completo");
+      if (!sub) return "Tus reportes: OFF";
+      ReportSub &r = reportSubscribers[chatId];
+      return String("Tus reportes: ON | ") + String(r.intervalMs / 60000) + " min" +
+             " | Modo: " + (r.compact ? "compacto" : "completo");
     }
-    // Cambio de modo solamente: "reportes compacto" / "reportes completo"
-    String al = args; al.toLowerCase(); al.trim();
-    if (al == "compacto") { setReportCompact(true);  return "Reportes modo: compacto (smartwatch)"; }
-    if (al == "completo") { setReportCompact(false); return "Reportes modo: completo"; }
-
-    // Parsear: <on|off> [<minutos>] [<compacto|completo>]
     bool enabled = parseOnOff(args);
-    unsigned long interval = getAutoReadingsIntervalMs();
-    bool compact = getReportCompact();
+
+    // Parsear opciones: [<minutos>] [<compacto|completo>]
+    // Toma los valores actuales del usuario (o defaults si es nuevo)
+    ReportSub &r = reportSubscribers[chatId];  // crea con defaults si no existe
     int sp2 = args.indexOf(' ');
     while (sp2 >= 0) {
       int sp3 = args.indexOf(' ', sp2 + 1);
       String tok = sp3 == -1 ? args.substring(sp2 + 1) : args.substring(sp2 + 1, sp3);
       tok.trim();
       String tokL = tok; tokL.toLowerCase();
-      if      (tokL == "compacto") compact = true;
-      else if (tokL == "completo") compact = false;
-      else if (tok.toInt() > 0)   interval = tok.toInt() * 60000UL;
+      if      (tokL == "compacto") r.compact = true;
+      else if (tokL == "completo") r.compact = false;
+      else if (tok.toInt() > 0)   r.intervalMs = tok.toInt() * 60000UL;
       sp2 = sp3;
     }
-    setReportCompact(compact);
-    setAutoReadings(enabled, interval);
-    return String("Reportes ") + (enabled ? "ON" : "OFF") +
-           " | " + String(interval / 60000) + " min" +
-           " | Modo: " + (compact ? "compacto" : "completo");
+    if (!enabled) {
+      reportSubscribers.erase(chatId);
+      return "Tus reportes: OFF";
+    }
+    return String("Tus reportes: ON | ") + String(r.intervalMs / 60000) + " min" +
+           " | Modo: " + (r.compact ? "compacto" : "completo");
   }
 
   // --- Configuración ---
@@ -1018,6 +1033,20 @@ String handleCommand(const String &chatId, const String &raw) {
     return r;
   }
 
+  if (cmd == "acceso") {
+    if (authorizedChatIds.size() >= 5) return "Maximo de IDs alcanzado (5). Elimina uno con delid antes de abrir acceso.";
+    if (args == "on") {
+      enrollmentOpen = true;
+    } else if (args == "off") {
+      enrollmentOpen = false;
+    } else {
+      enrollmentOpen = !enrollmentOpen;
+    }
+    if (enrollmentOpen)
+      return "Acceso ABIERTO. El proximo chat desconocido que escriba sera agregado y el acceso se cerrara automaticamente.";
+    return "Acceso CERRADO. Solo IDs autorizados pueden interactuar.";
+  }
+
   if (cmd == "reset") {
     logAccion("CMD", "reset de configuracion");
     configReset();
@@ -1086,9 +1115,11 @@ bool isChatAuthorized(const String &chatId) {
 
 bool ensureChatAuthorized(const String &chatId) {
   if (isChatAuthorized(chatId)) return true;
-  if (authorizedChatIds.size() < 4) {
+  if (enrollmentOpen && authorizedChatIds.size() < 5) {
     authorizedChatIds.push_back(chatId);
     persistChatIds();
+    enrollmentOpen = false;  // cierra automaticamente tras agregar uno
+    broadcastMessage("[Acceso] Chat agregado: " + chatId + "\nAcceso cerrado automaticamente.");
     return true;
   }
   return false;
@@ -1450,17 +1481,16 @@ void pollTelegram() {
 }
 
 void sendPeriodicReport() {
-  if (!telegramEnabled || !getAutoReadingsEnabled() || !telegramBot) return;
+  if (!telegramEnabled || !telegramBot || reportSubscribers.empty()) return;
   unsigned long now = millis();
-  if (now - lastReportMs < getAutoReadingsIntervalMs()) return;
-  lastReportMs = now;
-
-  String target = !lastTelegramChatId.isEmpty() ? lastTelegramChatId :
-                  (!authorizedChatIds.empty() ? authorizedChatIds.front() : String(""));
-  if (target.isEmpty()) return;
-
-  String msg = getReportCompact() ? formatStatusCompact() : formatStatusFull();
-  telegramBot->sendMessage(target, msg, "");
+  for (auto &kv : reportSubscribers) {
+    if (!isChatAuthorized(kv.first)) continue;
+    ReportSub &r = kv.second;
+    if (now - r.lastMs < r.intervalMs) continue;
+    r.lastMs = now;
+    String msg = r.compact ? formatStatusCompact() : formatStatusFull();
+    telegramBot->sendMessage(kv.first, msg, "");
+  }
 }
 
 // =========================================================
