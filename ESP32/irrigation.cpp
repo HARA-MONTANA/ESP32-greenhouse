@@ -19,6 +19,15 @@ const int PUMP_OFF_LEVEL = LOW;
 bool autoIrrigationEnabled = false;
 bool tankEmptyNotified = false;
 bool pumpNotCalibratedNotified = false;
+
+// Proteccion capa 1: limite de riegos por dia (ventana de 24h en RAM)
+const int MAX_DAILY_IRRIGATIONS = 4;
+unsigned long windowStartMs = 0;
+int dailyIrrigationCount = 0;
+bool dailyLimitNotified = false;
+
+// Proteccion capa 2: riegos consecutivos sin efecto
+int noImprovementStreak = 0;
 }  // namespace
 
 void initIrrigationHardware() {
@@ -81,6 +90,23 @@ bool checkSoilAndIrrigate() {
     return false;
   }
 
+  // Proteccion capa 1: maximo MAX_DAILY_IRRIGATIONS riegos automaticos por dia
+  unsigned long nowMs = millis();
+  if (windowStartMs == 0 || nowMs - windowStartMs >= 86400000UL) {
+    windowStartMs = nowMs;
+    dailyIrrigationCount = 0;
+    dailyLimitNotified = false;
+  }
+  if (dailyIrrigationCount >= MAX_DAILY_IRRIGATIONS) {
+    if (!dailyLimitNotified) {
+      broadcastMessage("ALERTA: Limite diario de " + String(MAX_DAILY_IRRIGATIONS) +
+                       " riegos alcanzado. Verifica el sensor de suelo.");
+      dailyLimitNotified = true;
+    }
+    return false;
+  }
+
+  dailyIrrigationCount++;
   irrigate(soilReading);
   return true;
 }
@@ -127,8 +153,20 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
   // soilPct: usar finalPercent (estado tras el riego); mqRaw: no relevante para riego
   logAccionConSensores("RIEGO", det, irrTemp, irrRh, finalPercent, -1);
 
-  if (finalPercent <= initialPercent) {
-    broadcastMessage("Riego sin incremento de humedad; verifica bomba y mangueras.");
+  // Proteccion capa 2: detectar sensor roto o bomba sin efecto
+  if (finalPercent < initialPercent + 5) {
+    noImprovementStreak++;
+    broadcastMessage("Riego sin efecto (" + String(noImprovementStreak) +
+                     " consecutivo/s). Suelo: " + String(initialPercent) +
+                     "% -> " + String(finalPercent) + "%. Verifica sensor y bomba.");
+    if (noImprovementStreak >= 2) {
+      broadcastMessage("ALERTA: Auto riego desactivado por falla repetida. "
+                       "Revisa sensor de suelo y bomba antes de reactivar.");
+      setAutoIrrigationEnabled(false);
+      noImprovementStreak = 0;
+    }
+  } else {
+    noImprovementStreak = 0;
   }
 
   time_t now;
