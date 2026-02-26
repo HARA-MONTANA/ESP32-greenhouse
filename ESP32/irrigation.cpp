@@ -26,8 +26,10 @@ unsigned long windowStartMs = 0;
 int dailyIrrigationCount = 0;
 bool dailyLimitNotified = false;
 
-// Proteccion capa 2: riegos consecutivos sin efecto
-int noImprovementStreak = 0;
+// Proteccion capa 2: deteccion de falla de hardware en sensor de suelo
+// ADC ESP32 es de 12 bits (0-4095). Extremos indican corto o circuito abierto.
+const int ADC_FAULT_LOW  = 50;    // cortocircuito: los pines estan en corto
+const int ADC_FAULT_HIGH = 4050;  // circuito abierto: sensor desconectado o roto
 }  // namespace
 
 void initIrrigationHardware() {
@@ -68,6 +70,15 @@ bool checkSoilAndIrrigate() {
   pumpNotCalibratedNotified = false;
 
   if (!autoIrrigationEnabled) return false;
+
+  // Proteccion capa 2: valores ADC en extremos indican falla de hardware
+  if (soilReading <= ADC_FAULT_LOW || soilReading >= ADC_FAULT_HIGH) {
+    const char* tipo = soilReading <= ADC_FAULT_LOW ? "cortocircuito" : "circuito abierto";
+    broadcastMessage("ALERTA: Sensor de suelo dañado (" + String(tipo) +
+                     ", ADC=" + String(soilReading) + "). Auto riego desactivado.");
+    setAutoIrrigationEnabled(false);
+    return false;
+  }
 
   if (!isTankWaterAvailable()) {
     if (!tankEmptyNotified) {
@@ -153,20 +164,8 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
   // soilPct: usar finalPercent (estado tras el riego); mqRaw: no relevante para riego
   logAccionConSensores("RIEGO", det, irrTemp, irrRh, finalPercent, -1);
 
-  // Proteccion capa 2: detectar sensor roto o bomba sin efecto
-  if (finalPercent < initialPercent + 5) {
-    noImprovementStreak++;
-    broadcastMessage("Riego sin efecto (" + String(noImprovementStreak) +
-                     " consecutivo/s). Suelo: " + String(initialPercent) +
-                     "% -> " + String(finalPercent) + "%. Verifica sensor y bomba.");
-    if (noImprovementStreak >= 2) {
-      broadcastMessage("ALERTA: Auto riego desactivado por falla repetida. "
-                       "Revisa sensor de suelo y bomba antes de reactivar.");
-      setAutoIrrigationEnabled(false);
-      noImprovementStreak = 0;
-    }
-  } else {
-    noImprovementStreak = 0;
+  if (finalPercent <= initialPercent) {
+    broadcastMessage("Riego sin incremento de humedad; verifica bomba y mangueras.");
   }
 
   time_t now;
