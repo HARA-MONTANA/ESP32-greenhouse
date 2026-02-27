@@ -20,6 +20,7 @@
 #include "dashboard.h"
 #include <SD.h>
 #include "sdcard.h"
+#include "gdrive.h"
 
 // =========================================================
 //  VARIABLES GLOBALES
@@ -853,7 +854,8 @@ String commandHelp() {
   h += "acceso [on|off] - Abrir/cerrar inscripcion (toggle sin argumento)\n";
   h += "addid [ID] / delid [ID] / ids\n";
   h += "reset - Restablecer configuracion\n";
-  h += "dormir [on|off] [min] - Sleep WiFi (ahorra energia entre polls)";
+  h += "dormir [on|off] [min] - Sleep WiFi (ahorra energia entre polls)\n";
+  h += "gdrive [<url>|off] - Logging a Google Drive via Apps Script";
   return h;
 }
 
@@ -1166,6 +1168,23 @@ String handleCommand(const String &chatId, const String &raw) {
              "Modem duerme entre polls. Sensores/riego/luces siguen activos.";
     }
     return "Uso: dormir [on|off] [minutos 1-60]";
+  }
+
+  // --- Google Drive ---
+
+  if (cmd == "gdrive") {
+    if (args.isEmpty()) {
+      if (!gdriveIsEnabled()) return "Google Drive: desactivado. Usa: gdrive <url>";
+      return "Google Drive: activo\nURL: " + gdriveGetUrl();
+    }
+    String argsL = args; argsL.toLowerCase();
+    if (argsL == "off" || argsL == "0" || argsL == "no") {
+      gdriveSetUrl("");
+      return "Google Drive: desactivado.";
+    }
+    if (!args.startsWith("http")) return "URL invalida. Debe comenzar con https://";
+    gdriveSetUrl(args);
+    return "Google Drive: activado.\nURL guardada. Los proximos logs se enviaran al Sheet.";
   }
 
   return "Comando no reconocido. Usa: help";
@@ -1821,6 +1840,11 @@ void setup() {
 
   // SD card (después de NTP para que los timestamps sean correctos)
   bool sdOk = sdInit();
+
+  // Google Drive: inicializar y registrar hook en sdcard
+  gdriveInit();
+  sdSetLogHook(gdriveWriteLog);
+
   logAccion("INICIO", "Sistema iniciado; WiFi " +
             String(wifiOk ? "OK" : "FALLO") +
             "; NTP " + String(ntpOk ? "OK" : "FALLO") +

@@ -5,6 +5,9 @@
 
 bool sdReady = false;
 
+static SdLogHook g_logHook = nullptr;
+void sdSetLogHook(SdLogHook hook) { g_logHook = hook; }
+
 // ─── helpers internos ───────────────────────────────────────────────────────
 
 static void getLocalDt(struct tm &out) {
@@ -84,6 +87,11 @@ static void writeLog(const char *tipo,
   }
 
   f.close();
+
+  // Notificar al módulo externo (ej. Google Drive) si hay hook registrado
+  if (g_logHook) {
+    g_logHook(tipo, tempC, rh, soilPct, mqRaw, hasNumeric, detalle.c_str());
+  }
 }
 
 // ─── API pública ─────────────────────────────────────────────────────────────

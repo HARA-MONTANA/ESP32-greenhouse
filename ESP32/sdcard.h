@@ -27,3 +27,8 @@ bool   sdBuildLogIndex(String &outJson);
 // Valida que rawPath sea un path seguro dentro de /logs
 // Retorna el path validado, o String vacío si inválido o no existe
 String sdValidateLogPath(const String &rawPath);
+
+// Hook opcional: se llama justo después de cada escritura exitosa en SD.
+// Firma: (tipo, tempC, rh, soilPct, mqRaw, hasNumeric, detalle)
+typedef void (*SdLogHook)(const char*, float, float, int, int, bool, const char*);
+void sdSetLogHook(SdLogHook hook);
