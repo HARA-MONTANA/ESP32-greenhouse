@@ -370,7 +370,7 @@ void initWebServer() {
 
   // Ruta: configuración actual como JSON
   webServer.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *req) {
-    StaticJsonDocument<384> doc;
+    StaticJsonDocument<640> doc;
     doc["stage"]          = stageToCode(getCurrentStage());
     doc["pot_l"]          = getPotVolumeL();
     doc["ml_pl"]          = getMlPerLiterForStage(PLANTULA);
@@ -392,6 +392,8 @@ void initWebServer() {
     doc["tz_offset"]      = getTimezoneOffsetHours();
     doc["pump_calibrated"]= isPumpCalibrated();
     doc["bot_name"]       = botName;
+    doc["gdrive_url"]     = gdriveGetUrl();
+    doc["gdrive_enabled"] = gdriveIsEnabled();
     String json;
     serializeJson(doc, json);
     req->send(200, "application/json", json);
@@ -420,6 +422,27 @@ void initWebServer() {
           credStore.putString("botname", name);
           botName = name;
         }
+        req->send(200, "application/json", "{\"ok\":true}");
+      } else {
+        req->send(400, "application/json", "{\"error\":\"invalid json\"}");
+      }
+    }
+  );
+
+  // Ruta: configurar URL de Google Apps Script para logging en Drive
+  webServer.on("/api/gdrive", HTTP_POST,
+    [](AsyncWebServerRequest *req) {},
+    nullptr,
+    [](AsyncWebServerRequest *req, uint8_t *data, size_t len, size_t index, size_t total) {
+      StaticJsonDocument<512> doc;
+      if (deserializeJson(doc, data, len) == DeserializationError::Ok) {
+        String url = doc["url"] | "";
+        url.trim();
+        if (url.length() > 0 && !url.startsWith("http")) {
+          req->send(400, "application/json", "{\"error\":\"URL invalida\"}");
+          return;
+        }
+        gdriveSetUrl(url);
         req->send(200, "application/json", "{\"ok\":true}");
       } else {
         req->send(400, "application/json", "{\"error\":\"invalid json\"}");
