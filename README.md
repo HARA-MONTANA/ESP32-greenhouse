@@ -129,10 +129,11 @@ El mecanismo usa un **Google Apps Script** desplegado como aplicación web. El E
 
 **1. Crear el Apps Script**
 
-1. Abre [drive.google.com](https://drive.google.com) y crea una hoja de cálculo nueva (se usa solo para llegar al editor de scripts).
-2. Menú **Extensiones → Apps Script**.
-3. Borra el contenido del editor y pega el contenido del archivo `ESP32/apps_script.js` incluido en este repositorio.
-4. Guarda con **Ctrl+S** (puedes darle cualquier nombre al proyecto).
+1. Abre [script.google.com](https://script.google.com) y haz clic en **Nuevo proyecto**.
+   - Alternativamente: en [drive.google.com](https://drive.google.com) → **Nuevo → Más → Google Apps Script**.
+   - El script no usa ninguna hoja de cálculo; crea y gestiona directamente una carpeta `logs/` con archivos CSV en tu Drive.
+2. Borra el contenido del editor y pega el contenido del archivo `ESP32/apps_script.js` incluido en este repositorio.
+3. Guarda con **Ctrl+S** (puedes darle cualquier nombre al proyecto).
 
 **2. Desplegar como aplicación web**
 
