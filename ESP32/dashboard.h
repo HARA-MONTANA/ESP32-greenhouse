@@ -769,8 +769,7 @@ function flash(b,ok){
 // ── Sync controls
 function syncCtrl(d){
   var lb=document.getElementById('led-badge');
-  if(d.led_manual){lb.className='badge b-on';lb.textContent='MANUAL ON'}
-  else if(d.light_on){lb.className='badge b-on';lb.textContent='AUTO ON'}
+  if(d.led_on){lb.className='badge b-on';lb.textContent='ON'}
   else{lb.className='badge b-off';lb.textContent='OFF'}
   if(d.led_pct!=null){
     document.getElementById('led-sl').value=d.led_pct;
