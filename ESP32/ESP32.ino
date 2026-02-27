@@ -20,6 +20,7 @@
 #include "dashboard.h"
 #include <SD.h>
 #include "sdcard.h"
+#include "gdrive.h"
 
 // =========================================================
 //  VARIABLES GLOBALES
@@ -853,7 +854,8 @@ String commandHelp() {
   h += "acceso [on|off] - Abrir/cerrar inscripcion (toggle sin argumento)\n";
   h += "addid [ID] / delid [ID] / ids\n";
   h += "reset - Restablecer configuracion\n";
-  h += "dormir [on|off] [min] - Sleep WiFi (ahorra energia entre polls)";
+  h += "dormir [on|off] [min] - Sleep WiFi (ahorra energia entre polls)\n";
+  h += "gdrive [<url>|off] - Logging a Google Drive via Apps Script";
   return h;
 }
 
@@ -1168,6 +1170,23 @@ String handleCommand(const String &chatId, const String &raw) {
     return "Uso: dormir [on|off] [minutos 1-60]";
   }
 
+  // --- Google Drive ---
+
+  if (cmd == "gdrive") {
+    if (args.isEmpty()) {
+      if (!gdriveIsEnabled()) return "Google Drive: desactivado. Usa: gdrive <url>";
+      return "Google Drive: activo\nURL: " + gdriveGetUrl();
+    }
+    String argsL = args; argsL.toLowerCase();
+    if (argsL == "off" || argsL == "0" || argsL == "no") {
+      gdriveSetUrl("");
+      return "Google Drive: desactivado.";
+    }
+    if (!args.startsWith("http")) return "URL invalida. Debe comenzar con https://";
+    gdriveSetUrl(args);
+    return "Google Drive: activado.\nURL guardada. Los proximos logs se enviaran al Sheet.";
+  }
+
   return "Comando no reconocido. Usa: help";
 }
 
@@ -1420,6 +1439,38 @@ void requestCredentials() {
   wifiPassword = promptOrStoredValue("WiFi Password:", storedWifiPassword, promptTimeoutMs);
   telegramToken = promptOrStoredValue("Token Telegram:", storedTelegramToken, promptTimeoutMs);
 
+  // Google Drive Apps Script URL — completamente opcional, Enter para omitir
+  if (!skipCredentialPrompt) {
+    Serial.println();
+    Serial.println("Google Drive Apps Script URL (opcional):");
+    Serial.println("  Pega la URL del webhook para guardar logs en Drive.");
+    String stored = gdriveGetUrl();
+    if (!stored.isEmpty()) {
+      Serial.print("  [actual: ");
+      Serial.print(stored);
+      Serial.println("]");
+      Serial.println("  Enter para conservar, \"off\" para desactivar.");
+    } else {
+      Serial.println("  Enter para omitir.");
+    }
+    String input = readLineFromSerial("> ", promptTimeoutMs, true);
+    input.trim();
+    if (!input.isEmpty()) {
+      String inputL = input;
+      inputL.toLowerCase();
+      if (inputL == "off" || inputL == "no") {
+        gdriveSetUrl("");
+        Serial.println("Google Drive: desactivado.");
+      } else if (input.startsWith("http")) {
+        gdriveSetUrl(input);
+        Serial.println("Google Drive: URL guardada.");
+      } else {
+        Serial.println("URL ignorada (debe comenzar con http). Usa /gdrive para configurarla luego.");
+      }
+    }
+    // Si input está vacío se conserva el valor existente (o ninguno)
+  }
+
   Serial.println();
   Serial.println("=========== CONFIGURACION INICIAL ===========");
   Serial.print("WiFi SSID: ");
@@ -1428,6 +1479,8 @@ void requestCredentials() {
   Serial.println(wifiPassword);
   Serial.print("Token Telegram: ");
   Serial.println(telegramToken);
+  Serial.print("Google Drive: ");
+  Serial.println(gdriveIsEnabled() ? gdriveGetUrl() : "desactivado");
   Serial.println();
   Serial.println("Credenciales recibidas.");
   Serial.println("==============================================");
@@ -1756,6 +1809,9 @@ void setup() {
   // Cargar credenciales almacenadas
   loadStoredCredentials();
 
+  // Cargar URL de Google Drive antes del prompt (para mostrar valor actual)
+  gdriveInit();
+
   const bool credSkipPressed = isSkipButtonPressed();
   const bool hasStoredCreds = hasStoredCredentials();
   skipCredentialPrompt = credSkipPressed && hasStoredCreds;
@@ -1821,6 +1877,8 @@ void setup() {
 
   // SD card (después de NTP para que los timestamps sean correctos)
   bool sdOk = sdInit();
+  sdSetLogHook(gdriveWriteLog);  // registrar hook de Google Drive
+
   logAccion("INICIO", "Sistema iniciado; WiFi " +
             String(wifiOk ? "OK" : "FALLO") +
             "; NTP " + String(ntpOk ? "OK" : "FALLO") +
