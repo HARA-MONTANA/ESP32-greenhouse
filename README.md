@@ -123,7 +123,7 @@ Mi unidad/
         └── 2026-03-01.csv
 ```
 
-El mecanismo usa un **Google Apps Script** desplegado como aplicación web. El ESP32 envía un POST HTTPS con los datos del log; el script escribe la fila en el archivo CSV correspondiente dentro de Google Drive usando la API de Drive. No se requiere OAuth2 en el ESP32.
+El mecanismo usa un **Google s Script** desplegado como aplicación web. El ESP32 envía un POST HTTPS con los datos del log; el script escribe la fila en el archivo CSV correspondiente dentro de Google Drive usando la API de Drive. No se requiere OAuth2 en el ESP32.
 
 ### Configuración inicial (una sola vez)
 
@@ -132,7 +132,7 @@ El mecanismo usa un **Google Apps Script** desplegado como aplicación web. El E
 1. Abre [script.google.com](https://script.google.com) y haz clic en **Nuevo proyecto**.
    - Alternativamente: en [drive.google.com](https://drive.google.com) → **Nuevo → Más → Google Apps Script**.
    - El script no usa ninguna hoja de cálculo; crea y gestiona directamente una carpeta `logs/` con archivos CSV en tu Drive.
-2. Borra el contenido del editor y pega el contenido del archivo `ESP32/apps_script.js` incluido en este repositorio.
+2. Borra el contenido del editor y pega el contenido del archivo `apps_script.js` incluido en este repositorio.
 3. Guarda con **Ctrl+S** (puedes darle cualquier nombre al proyecto).
 
 **2. Desplegar como aplicación web**
