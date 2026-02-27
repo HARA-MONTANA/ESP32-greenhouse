@@ -615,6 +615,27 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
     </div>
   </details>
 
+  <!-- Google Drive -->
+  <details class="csec" id="csec-gdrive">
+    <summary style="border-left-color:#4285f4">
+      &#128196; Google Drive
+      <span class="csec-meta">
+        <span id="gdrive-status-tag" class="csec-tag" style="background:rgba(255,18,79,.12);color:var(--c4);border-color:#ff124f44">Desactivado</span>
+      </span>
+    </summary>
+    <div class="cbody">
+      <p class="cnote">Replica los logs de la SD en Google Drive con la misma estructura de carpetas y CSVs. Requiere un Google Apps Script desplegado como aplicaci&#243;n web. Ver README para instrucciones.</p>
+      <div class="cfield">
+        <label>URL del webhook</label>
+        <input type="text" id="gdrive-url-inp" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="cact">
+        <button class="btn btn-p" onclick="saveGdrive(this)">&#128190; Guardar URL</button>
+        <button class="btn btn-o" onclick="disableGdrive(this)">Desactivar</button>
+      </div>
+    </div>
+  </details>
+
 </div><!-- /view-config -->
 
 </main>
@@ -890,6 +911,9 @@ function loadConfig(){
     sv('cfg-smin',c.soil_min_pct);sv('cfg-smax',c.soil_max_pct);
     sv('cfg-adry',c.soil_dry_adc);sv('cfg-awet',c.soil_wet_adc);
     sv('cfg-tz',c.tz_offset);
+    // Google Drive
+    if(c.gdrive_url!=null)sv('gdrive-url-inp',c.gdrive_url);
+    setGdriveTag(c.gdrive_enabled);
     // Sincronizar umbrales de visualizacion desde el dispositivo
     if(c.temp_max)V.tWarn=c.temp_max;
     if(c.hum_min)V.rhL=c.hum_min;
@@ -945,6 +969,31 @@ function saveTelegram(){
         alert('Telegram guardado.');
       }
     }).catch(function(){alert('Error al guardar Telegram.')});
+}
+
+// ── Google Drive
+function setGdriveTag(enabled){
+  var t=document.getElementById('gdrive-status-tag');
+  if(!t)return;
+  if(enabled){
+    t.textContent='Activo';
+    t.style.cssText='background:rgba(57,255,20,.12);color:#39ff14;border:1px solid #39ff1440';
+  }else{
+    t.textContent='Desactivado';
+    t.style.cssText='background:rgba(255,18,79,.12);color:var(--c4);border:1px solid #ff124f44';
+  }
+}
+function saveGdrive(btn){
+  var url=document.getElementById('gdrive-url-inp').value.trim();
+  if(!url){flash(btn,false);return;}
+  if(!url.startsWith('http')){flash(btn,false);alert('URL inv\u00e1lida. Debe comenzar con https://');return;}
+  sc({cmd:'gdrive',args:url},btn);
+  setGdriveTag(true);
+}
+function disableGdrive(btn){
+  sc({cmd:'gdrive',args:'off'},btn);
+  document.getElementById('gdrive-url-inp').value='';
+  setGdriveTag(false);
 }
 
 // ── WiFi network management

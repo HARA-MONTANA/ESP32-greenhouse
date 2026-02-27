@@ -370,7 +370,7 @@ void initWebServer() {
 
   // Ruta: configuración actual como JSON
   webServer.on("/api/config", HTTP_GET, [](AsyncWebServerRequest *req) {
-    StaticJsonDocument<384> doc;
+    DynamicJsonDocument doc(768);
     doc["stage"]          = stageToCode(getCurrentStage());
     doc["pot_l"]          = getPotVolumeL();
     doc["ml_pl"]          = getMlPerLiterForStage(PLANTULA);
@@ -392,6 +392,8 @@ void initWebServer() {
     doc["tz_offset"]      = getTimezoneOffsetHours();
     doc["pump_calibrated"]= isPumpCalibrated();
     doc["bot_name"]       = botName;
+    doc["gdrive_enabled"] = gdriveIsEnabled();
+    doc["gdrive_url"]     = gdriveGetUrl();
     String json;
     serializeJson(doc, json);
     req->send(200, "application/json", json);
