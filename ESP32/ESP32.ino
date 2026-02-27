@@ -626,7 +626,7 @@ void applyLightSchedule() {
   time_t offTs = startTs + getLightHoursForStage(stage) * 3600L;
 
   bool shouldBeOn = nowTs >= startTs && nowTs < offTs;
-  bool ledShouldBeOn = ledOn;  // LED morado es independiente del relay de CA
+  bool ledShouldBeOn = shouldBeOn && ledOn;  // LED sigue el horario de luz, sin restriccion de fase
 
   static bool prevLightOn = false;
   if (shouldBeOn != prevLightOn) {
