@@ -168,6 +168,11 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 .ml-tbl input{width:100%}
 /* Garantiza que [hidden] siempre gane sobre cualquier display CSS */
 [hidden]{display:none!important}
+/* WiFi network list */
+.wifi-row{display:flex;align-items:center;justify-content:space-between;padding:7px 9px;border:1px solid var(--border);border-radius:5px;margin-bottom:6px;background:var(--bg1)}
+.wifi-ssid{font-size:.8rem;font-weight:600;cursor:pointer;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wifi-ssid:hover{color:var(--c1)}
+.wifi-acts{display:flex;gap:5px;flex-shrink:0;margin-left:8px}
 </style>
 </head>
 <body>
@@ -580,6 +585,36 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
     </div>
   </details>
 
+  <!-- Redes WiFi guardadas -->
+  <details class="csec" id="csec-wifi">
+    <summary style="border-left-color:#ffb300">
+      &#128246; Redes WiFi
+      <span class="csec-meta"><span id="wifi-count-tag" class="csec-tag">0 / 5</span></span>
+    </summary>
+    <div class="cbody">
+      <p class="cnote">Solo se guardan redes que hayan conectado exitosamente y obtenido IP. Si la red configurada falla al arrancar, el sistema prueba las guardadas automaticamente.</p>
+      <div id="wifi-list"></div>
+      <hr class="cfg-divider">
+      <p style="font-size:.74rem;color:var(--text2);margin-bottom:8px" id="wifi-form-title">&#10133; Agregar red</p>
+      <div class="cfield">
+        <label>SSID</label>
+        <input type="text" id="wifi-ssid-inp" placeholder="Nombre de la red" maxlength="32" autocomplete="off">
+      </div>
+      <div class="cfield">
+        <label>Contrase&#241;a</label>
+        <div class="pwd-wrap">
+          <input type="password" id="wifi-pass-inp" placeholder="Contrase&#241;a" maxlength="64" autocomplete="new-password">
+          <button class="eye" onclick="togglePwd('wifi-pass-inp',this)">&#128065;</button>
+        </div>
+      </div>
+      <input type="hidden" id="wifi-edit-idx" value="-1">
+      <div class="cact">
+        <button class="btn btn-o" id="wifi-cancel-btn" onclick="wifiCancelEdit()" style="display:none">Cancelar</button>
+        <button class="btn btn-p" onclick="wifiSave()">&#128190; Guardar red</button>
+      </div>
+    </div>
+  </details>
+
 </div><!-- /view-config -->
 
 </main>
@@ -694,7 +729,7 @@ function showTab(name){
   document.querySelectorAll('.tab-btn').forEach(function(b){
     b.classList.toggle('active',b.dataset.tab===name);
   });
-  if(name==='config')loadConfig();
+  if(name==='config'){loadConfig();loadWifiNets();}
   if(name==='logs')initLogs();
 }
 
@@ -911,6 +946,66 @@ function saveTelegram(){
       }
     }).catch(function(){alert('Error al guardar Telegram.')});
 }
+
+// ── WiFi network management
+function escH(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function loadWifiNets(){
+  fetch('/api/wifi').then(function(r){return r.json();}).then(function(nets){
+    var list=document.getElementById('wifi-list');
+    var tag=document.getElementById('wifi-count-tag');
+    if(!list)return;
+    tag.textContent=nets.length+' / 5';
+    if(!nets.length){
+      list.innerHTML='<p style="font-size:.75rem;color:var(--text2);margin:0 0 4px">No hay redes guardadas.</p>';
+      return;
+    }
+    list.innerHTML=nets.map(function(n){
+      var safe=n.ssid.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return '<div class="wifi-row" id="wrow-'+n.idx+'">'
+        +'<span class="wifi-ssid" onclick="wifiStartEdit('+n.idx+',\''+safe+'\')" title="Editar">'+escH(n.ssid)+'</span>'
+        +'<div class="wifi-acts">'
+        +'<button class="btn btn-o" style="padding:3px 9px;font-size:.72rem" onclick="wifiStartEdit('+n.idx+',\''+safe+'\')">&#9998;</button>'
+        +'<button class="btn btn-d" style="padding:3px 9px;font-size:.72rem" onclick="wifiDel('+n.idx+')">&#10005;</button>'
+        +'</div></div>';
+    }).join('');
+  }).catch(function(){});
+}
+function wifiSave(){
+  var ssid=document.getElementById('wifi-ssid-inp').value.trim();
+  var pass=document.getElementById('wifi-pass-inp').value;
+  var idx=parseInt(document.getElementById('wifi-edit-idx').value);
+  if(!ssid){alert('Ingresa el SSID de la red.');return;}
+  var url=idx>=0?'/api/wifi/edit':'/api/wifi/add';
+  var body=idx>=0?{idx:idx,ssid:ssid,pass:pass}:{ssid:ssid,pass:pass};
+  fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json();})
+    .then(function(d){
+      if(d.ok){wifiCancelEdit();loadWifiNets();}
+      else alert('Error: '+(d.error||'desconocido'));
+    }).catch(function(){alert('Error de conexion.');});
+}
+function wifiDel(idx){
+  if(!confirm('Eliminar esta red guardada?'))return;
+  fetch('/api/wifi/del',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idx:idx})})
+    .then(function(r){return r.json();})
+    .then(function(d){if(d.ok)loadWifiNets();});
+}
+function wifiStartEdit(idx,ssid){
+  document.getElementById('wifi-edit-idx').value=idx;
+  document.getElementById('wifi-ssid-inp').value=ssid;
+  document.getElementById('wifi-pass-inp').value='';
+  document.getElementById('wifi-form-title').textContent='\u270F\uFE0F Editar red';
+  document.getElementById('wifi-cancel-btn').style.display='';
+  document.getElementById('wifi-ssid-inp').focus();
+}
+function wifiCancelEdit(){
+  document.getElementById('wifi-edit-idx').value=-1;
+  document.getElementById('wifi-ssid-inp').value='';
+  document.getElementById('wifi-pass-inp').value='';
+  document.getElementById('wifi-form-title').textContent='\u2795 Agregar red';
+  document.getElementById('wifi-cancel-btn').style.display='none';
+}
+
 function updateBotLink(name){
   var clean=name?name.replace('@',''):'';
   var inp=document.getElementById('bot-name-hdr');
