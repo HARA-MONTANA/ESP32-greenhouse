@@ -24,12 +24,13 @@ Firmware para automatizar un invernadero con ESP32. Controla riego, iluminación
 1. Conectar el ESP32 por USB y abrir el monitor serie a **115200 baud**.
 2. Ingresar SSID de WiFi, contraseña y token de Telegram cuando se soliciten.
    - Presionar Enter sin escribir nada reutiliza el valor guardado en NVS.
-   - Presionar el botón GPIO 27 durante el arranque salta todos los prompts y usa las credenciales guardadas.
-3. Ingresar el offset UTC de la zona horaria (ej. `-3`, `-5`). Enter mantiene el valor guardado.
-4. El firmware sincroniza la hora por NTP y actualiza el RTC DS3231.
-5. Una vez conectado, el dashboard web queda disponible en `http://<IP>/`.
+   - Presionar el botón GPIO 27 durante el arranque salta **todos** los prompts y usa los valores guardados.
+3. Ingresar la URL del webhook de Google Drive (opcional). Enter la omite; ver [Logs en Google Drive](#logs-en-google-drive).
+4. Ingresar el offset UTC de la zona horaria (ej. `-3`, `-5`). Enter mantiene el valor guardado.
+5. El firmware sincroniza la hora por NTP y actualiza el RTC DS3231.
+6. Una vez conectado, el dashboard web queda disponible en `http://<IP>/`.
 
-Las credenciales (WiFi, token) se guardan en NVS y se reutilizan en futuros arranques.
+Las credenciales (WiFi, token, URL de Google Drive) se guardan en NVS y se reutilizan en futuros arranques.
 
 ## Dashboard web
 
@@ -55,10 +56,73 @@ La comunicación con el ESP32 es por **WebSocket** (`/ws`). Los controles del da
 
 La SD almacena dos tipos de registros en `/logs/MM/YYYY-MM-DD.csv`:
 
-- **Sensores** — lectura periódica cada 5 minutos, alineada al reloj (`:00`, `:05`, `:10`...).
-- **Acciones** — riego, luz ON/OFF, alertas, comandos y arranque del sistema.
+- **SENSOR** — lectura periódica cada 5 minutos, alineada al reloj (`:00`, `:05`, `:10`...).
+- **Acciones** — `RIEGO`, `LUZ_ON`, `LUZ_OFF`, `ALERTA_ON`, `ALERTA_OFF`, `CMD`, `INICIO`.
 
-Columnas del CSV: `timestamp, tipo, detalle, temp_c, rh_pct, suelo_pct, mq_raw`.
+Columnas del CSV: `fecha_hora, tipo, temp_c, hr_pct, suelo_pct, mq_raw, detalle`.
+
+## Logs en Google Drive
+
+Cuando está configurado, cada entrada que se escribe en la SD también se envía a Google Drive, replicando la misma estructura de carpetas y formato de CSV:
+
+```
+Mi unidad/
+└── logs/
+    ├── 02-2026/
+    │   ├── 2026-02-25.csv
+    │   └── 2026-02-27.csv
+    └── 03-2026/
+        └── 2026-03-01.csv
+```
+
+El mecanismo usa un **Google Apps Script** desplegado como aplicación web. El ESP32 envía un POST HTTPS con los datos del log; el script escribe la fila en el archivo CSV correspondiente dentro de Google Drive usando la API de Drive. No se requiere OAuth2 en el ESP32.
+
+### Configuración inicial (una sola vez)
+
+**1. Crear el Apps Script**
+
+1. Abre [drive.google.com](https://drive.google.com) y crea una hoja de cálculo nueva (se usa solo para llegar al editor de scripts).
+2. Menú **Extensiones → Apps Script**.
+3. Borra el contenido del editor y pega el contenido del archivo `ESP32/apps_script.js` incluido en este repositorio.
+4. Guarda con **Ctrl+S** (puedes darle cualquier nombre al proyecto).
+
+**2. Desplegar como aplicación web**
+
+1. Botón **Desplegar → Nueva implementación**.
+2. Haz clic en el engranaje ⚙ junto a "Tipo" y elige **Aplicación web**.
+3. Configura:
+   - **Ejecutar como:** Yo *(tu cuenta de Google)*
+   - **Acceso:** Cualquier usuario
+4. Haz clic en **Desplegar** y autoriza los permisos de Drive cuando se soliciten.
+5. Copia la **URL de la aplicación web** que aparece al finalizar. Tiene el formato:
+   ```
+   https://script.google.com/macros/s/XXXXXXXXXXXXXXXXXX/exec
+   ```
+
+**3. Configurar en el ESP32**
+
+**Opción A — durante el arranque (monitor serie):**
+```
+Google Drive Apps Script URL (opcional):
+  Pega la URL del webhook para guardar logs en Drive.
+  Enter para omitir.
+> https://script.google.com/macros/s/XXXXXXXX/exec
+```
+
+**Opción B — en cualquier momento (Telegram o Serial):**
+```
+/gdrive https://script.google.com/macros/s/XXXXXXXX/exec
+```
+
+La URL se guarda en NVS. Desde ese momento cada log (sensor y acción) se envía a Drive además de escribirse en la SD.
+
+### Notas
+
+- Si el ESP32 no tiene WiFi al momento de generar un log, la entrada se omite en Drive (pero siempre se guarda en la SD).
+- Para ver el estado actual: `/gdrive`
+- Para desactivar: `/gdrive off`
+- Si redespliegas el Apps Script (nueva versión), debes actualizar la URL en el ESP32 con `/gdrive <nueva-url>`.
+- El archivo CSV se crea automáticamente si no existe, incluyendo la cabecera en la primera fila.
 
 ## Dependencias
 
@@ -138,6 +202,7 @@ Pasos: envía `/calibrar`, mide el agua que salió, luego envía `/caudal [mL]`.
 | `/delid [ID]` | Eliminar un chat autorizado |
 | `/ids` | Ver chats autorizados |
 | `/reset` | Restablecer configuración de planta a valores por defecto |
+| `/gdrive [url\|off]` | Configurar o desactivar el webhook de Google Drive |
 
 ## Etapas de crecimiento
 
