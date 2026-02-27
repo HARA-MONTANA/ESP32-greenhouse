@@ -177,6 +177,19 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 .wifi-ssid{font-size:.8rem;font-weight:600;cursor:pointer;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wifi-ssid:hover{color:var(--c1)}
 .wifi-acts{display:flex;gap:5px;flex-shrink:0;margin-left:8px}
+/* Prueba actuadores */
+#view-prueba .act-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--gap);margin-top:var(--gap)}
+@media(max-width:580px){#view-prueba .act-grid{grid-template-columns:1fr}}
+.act-card{position:relative;overflow:hidden}
+.act-card .act-icon{font-size:1.6rem;margin-bottom:6px;display:block}
+.act-card .act-name{font-size:.8rem;font-weight:700;margin-bottom:2px}
+.act-card .act-pin{font-size:.67rem;color:var(--text2);margin-bottom:10px}
+.act-card .act-st{font-size:.72rem;min-height:1.3em;margin-bottom:8px;transition:color .3s}
+.act-card .act-bar{position:absolute;bottom:0;left:0;height:3px;width:0;border-radius:0 2px 2px 0;transition:width linear}
+.act-card.testing .act-bar{background:var(--warn)}
+.act-card.done .act-bar{width:100%!important;background:var(--neon)}
+.act-card.err .act-bar{width:100%!important;background:var(--c4)}
+.test-intro{font-size:.76rem;color:var(--text2);line-height:1.55;margin-bottom:4px}
 </style>
 </head>
 <body>
@@ -188,6 +201,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
     <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button>
     <button class="tab-btn" data-tab="logs" onclick="showTab('logs')">Logs</button>
     <button class="tab-btn" data-tab="config" onclick="showTab('config')">Configuraci&#243;n</button>
+    <button class="tab-btn" data-tab="prueba" onclick="showTab('prueba')">&#9889; Prueba</button>
   </nav>
   <div id="bot-name-wrap" style="display:flex;align-items:center;gap:5px">
     <input type="text" id="bot-name-hdr" placeholder="@NombreBot"
@@ -654,6 +668,60 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 
 </div><!-- /view-config -->
 
+<!-- ===== PRUEBA ACTUADORES ===== -->
+<div id="view-prueba" hidden>
+  <div class="card">
+    <div class="card-title">&#9889; Prueba de Actuadores</div>
+    <p class="test-intro">
+      Cada bot&#243;n activa el actuador durante <strong>5 segundos</strong> para verificar su funcionamiento.<br>
+      La prueba restablece el estado original al terminar.
+    </p>
+    <div class="act-grid">
+
+      <!-- Bomba -->
+      <div class="card act-card" id="act-card-bomba" style="border-color:var(--cyan)">
+        <span class="act-icon">&#128167;</span>
+        <div class="act-name" style="color:var(--cyan)">Bomba de Agua</div>
+        <div class="act-pin">PIN 17 &mdash; MOSFET DC</div>
+        <div class="act-st" id="act-st-bomba">Lista para probar</div>
+        <button class="btn btn-p" id="act-btn-bomba" onclick="testActuator('bomba',this)">&#9654; Probar 5s</button>
+        <div class="act-bar" id="act-bar-bomba"></div>
+      </div>
+
+      <!-- LED Morado -->
+      <div class="card act-card" id="act-card-led" style="border-color:var(--c1)">
+        <span class="act-icon">&#128161;</span>
+        <div class="act-name" style="color:var(--c2)">LED Morado</div>
+        <div class="act-pin">PIN 26 &mdash; PWM 1&thinsp;kHz</div>
+        <div class="act-st" id="act-st-led">Lista para probar</div>
+        <button class="btn btn-p" id="act-btn-led" onclick="testActuator('led',this)">&#9654; Probar 5s</button>
+        <div class="act-bar" id="act-bar-led"></div>
+      </div>
+
+      <!-- Luz AC -->
+      <div class="card act-card" id="act-card-luz" style="border-color:#ffea00">
+        <span class="act-icon">&#9728;</span>
+        <div class="act-name" style="color:#ffea00">Luz AC (Rel&#233;)</div>
+        <div class="act-pin">PIN 13 &mdash; Rel&#233; AC</div>
+        <div class="act-st" id="act-st-luz">Lista para probar</div>
+        <button class="btn btn-p" id="act-btn-luz" onclick="testActuator('luz',this)">&#9654; Probar 5s</button>
+        <div class="act-bar" id="act-bar-luz"></div>
+      </div>
+
+      <!-- Ventiladores -->
+      <div class="card act-card" id="act-card-fan" style="border-color:var(--neon)">
+        <span class="act-icon">&#127744;</span>
+        <div class="act-name" style="color:var(--neon)">Ventiladores</div>
+        <div class="act-pin">PIN 16 &mdash; PWM 25&thinsp;kHz</div>
+        <div class="act-st" id="act-st-fan">Lista para probar</div>
+        <button class="btn btn-p" id="act-btn-fan" onclick="testActuator('fan',this)">&#9654; Probar 5s</button>
+        <div class="act-bar" id="act-bar-fan"></div>
+      </div>
+
+    </div>
+  </div>
+</div><!-- /view-prueba -->
+
 </main>
 
 <script>
@@ -765,7 +833,7 @@ setInterval(function(){
 
 // ── Tabs
 function showTab(name){
-  ['dashboard','logs','config'].forEach(function(t){
+  ['dashboard','logs','config','prueba'].forEach(function(t){
     document.getElementById('view-'+t).hidden=(t!==name);
   });
   document.querySelectorAll('.tab-btn').forEach(function(b){
@@ -1310,6 +1378,44 @@ function saveUmbralesSuelo(btn){
 }
 
 // ── Init
+// ── Prueba de actuadores
+var _testTimers={};
+function testActuator(act,btn){
+  if(!ws||ws.readyState!==1){flash(btn,false);return;}
+  var card=document.getElementById('act-card-'+act);
+  var stEl=document.getElementById('act-st-'+act);
+  var bar=document.getElementById('act-bar-'+act);
+  // Deshabilitar botón durante la prueba
+  btn.disabled=true;
+  card.className='card act-card testing';
+  stEl.style.color='var(--warn)';
+  stEl.textContent='&#9201; Activo... 5s';
+  bar.style.width='0%';
+  bar.style.transitionDuration='';
+  // Animar la barra de progreso en 5 s
+  requestAnimationFrame(function(){
+    bar.style.transitionDuration='5s';
+    bar.style.width='100%';
+  });
+  // Enviar comando al ESP32 via WebSocket
+  ws.send(JSON.stringify({cmd:'test_act',args:act}));
+  // Cuenta regresiva local
+  var secs=5;
+  if(_testTimers[act])clearInterval(_testTimers[act]);
+  _testTimers[act]=setInterval(function(){
+    secs--;
+    if(secs>0){
+      stEl.textContent='\u23F1 Activo... '+secs+'s';
+    } else {
+      clearInterval(_testTimers[act]);
+      btn.disabled=false;
+      card.className='card act-card done';
+      stEl.style.color='var(--neon)';
+      stEl.textContent='\u2705 Completado';
+    }
+  },1000);
+}
+
 (function(){
   var cu=localStorage.getItem('gh_cam_url');
   if(cu){document.getElementById('cam-url').value=cu;camConnect()}

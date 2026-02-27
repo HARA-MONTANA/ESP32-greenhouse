@@ -102,6 +102,7 @@ const int LED_PWM_FREQ    = 1000;
 const int LED_PWM_RES     = 8;
 const int LED_PWM_MAX     = 255;
 bool ledOn = false;  // true = sigue el horario de luz, false = apagado
+volatile bool actuatorTestActive = false;  // true durante prueba de 5s: pausa applyLightSchedule
 
 // Luces
 const int LIGHTS_ON_HOUR = 6;
@@ -612,6 +613,7 @@ bool stageUsesLeds(plantStage s) {
 }
 
 void applyLightSchedule() {
+  if (actuatorTestActive) return;  // pausa durante prueba de actuador
   struct tm now;
   if (!getLocalTime(&now)) return;
 
@@ -1104,6 +1106,47 @@ String handleCommand(const String &chatId, const String &raw) {
     delay(5000);
     pumpOff();
     return "🔧 Bomba activada 5s. Mide el volumen y envia: caudal [mL]";
+  }
+
+  // --- Prueba de actuadores (5 s cada uno) ---
+
+  if (cmd == "test_act") {
+    if (args == "bomba") {
+      pumpOn();
+      delay(5000);
+      pumpOff();
+      return "✅ Bomba: prueba 5s OK";
+    }
+    if (args == "led") {
+      actuatorTestActive = true;
+      ledcWrite(LED_PWM_CHANNEL, LED_PWM_MAX);
+      delay(5000);
+      actuatorTestActive = false;
+      applyLightSchedule();
+      return "✅ LED: prueba 5s OK";
+    }
+    if (args == "luz") {
+      actuatorTestActive = true;
+      bool wasOn = areLightsOn();
+      digitalWrite(PIN_ACLIGHT, LOW);   // LOW = relé ON
+      delay(5000);
+      digitalWrite(PIN_ACLIGHT, wasOn ? LOW : HIGH);
+      actuatorTestActive = false;
+      return "✅ Luz AC: prueba 5s OK";
+    }
+    if (args == "fan") {
+      bool prevAuto = fanAuto;
+      int  prevPct  = fanPercent;
+      fanAuto    = false;
+      fanPercent = 100;
+      updateFan(true);
+      delay(5000);
+      fanAuto    = prevAuto;
+      fanPercent = prevPct;
+      updateFan(true);
+      return "✅ Fan: prueba 5s OK";
+    }
+    return "⚠️ Uso: test_act [bomba|led|luz|fan]";
   }
 
   if (cmd == "caudal") {
