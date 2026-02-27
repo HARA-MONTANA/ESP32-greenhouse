@@ -1322,6 +1322,17 @@ bool isChatAuthorized(const String &chatId) {
 
 bool ensureChatAuthorized(const String &chatId) {
   if (isChatAuthorized(chatId)) return true;
+  // Primer usuario: si no hay IDs autorizados, se autoriza automaticamente
+  if (authorizedChatIds.empty()) {
+    authorizedChatIds.push_back(chatId);
+    persistChatIds();
+    if (telegramBot) {
+      telegramBot->sendMessage(chatId,
+        "[Acceso] Eres el primer usuario registrado.\n"
+        "Acceso de administrador concedido automaticamente.", "");
+    }
+    return true;
+  }
   if (enrollmentOpen && authorizedChatIds.size() < 5) {
     authorizedChatIds.push_back(chatId);
     persistChatIds();
