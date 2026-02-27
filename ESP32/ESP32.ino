@@ -101,8 +101,7 @@ const int LED_PWM_CHANNEL = 1;
 const int LED_PWM_FREQ    = 1000;
 const int LED_PWM_RES     = 8;
 const int LED_PWM_MAX     = 255;
-// 0=auto (sigue etapa), 1=forzado ON (sigue horario siempre), 2=forzado OFF
-int ledMode = 0;
+bool ledOn = false;  // true = sigue el horario de luz, false = apagado
 
 // Luces
 const int LIGHTS_ON_HOUR = 6;
@@ -310,7 +309,6 @@ void broadcastSensorData() {
   doc["fan_auto"]    = fanAuto;
   doc["light_on"]    = areLightsOn();
   doc["led_pct"]     = getLedIntensity();
-  doc["led_mode"]    = ledMode;
   doc["led_on"]      = (ledcRead(LED_PWM_CHANNEL) > 0);
   doc["auto_irr"]    = isAutoIrrigationEnabled();
   doc["tank_ok"]     = isTankWaterAvailable();
@@ -627,10 +625,7 @@ void applyLightSchedule() {
   time_t offTs = startTs + getLightHoursForStage(stage) * 3600L;
 
   bool shouldBeOn = nowTs >= startTs && nowTs < offTs;
-  bool ledShouldBeOn;
-  if      (ledMode == 1) ledShouldBeOn = shouldBeOn;                        // forzado ON: sigue horario siempre
-  else if (ledMode == 2) ledShouldBeOn = false;                             // forzado OFF: siempre apagado
-  else                   ledShouldBeOn = shouldBeOn && stageUsesLeds(stage); // auto: solo en pre/flo/fin
+  bool ledShouldBeOn = shouldBeOn && ledOn;
 
   static bool prevLightOn = false;
   if (shouldBeOn != prevLightOn) {
@@ -781,7 +776,7 @@ String formatStatusCompact() {
   String lastRiego = formatLastIrrigation();
   String riegoHora = (lastRiego == "Sin registro") ? "--:--" : lastRiego.substring(0, 5);
 
-  bool ledOn = ledcRead(LED_PWM_CHANNEL) > 0;
+  bool ledPhysOn = ledcRead(LED_PWM_CHANNEL) > 0;
 
   String s;
   s += "ESTADO\n";
@@ -790,8 +785,7 @@ String formatStatusCompact() {
   s += "MQ:" + String(mq) + " S:" + String(soilPct) + "%\n";
   s += "💨 Fan:" + String(fanPercent) + "% [" + (fanAuto ? "A" : "M") + "]\n";
   s += "☀️ Luz:" + String(areLightsOn() ? "ON" : "OFF") + "->" + formatLightsOffTime() + "\n";
-  s += "🟣 LED:" + (ledOn ? String(getLedIntensity()) + "%" : String("OFF"));
-  s += " [" + String(ledMode == 0 ? "AUTO" : ledMode == 1 ? "ON" : "OFF") + "]\n";
+  s += "🟣 LED:" + (ledPhysOn ? String(getLedIntensity()) + "%" : String("OFF")) + "\n";
   s += "Riego:" + riegoHora + " [" + String(isAutoIrrigationEnabled() ? "A" : "M") + "]\n";
   s += "Agua:" + String(water ? "SI" : "NO") + " [" + stageToShort(getCurrentStage()) + "]";
   return s;
@@ -806,7 +800,7 @@ String formatStatusFull() {
   int soilPct = soilPercentFromAdc(soilAdc);
   bool water = isTankWaterAvailable();
   float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
-  bool ledOn = ledcRead(LED_PWM_CHANNEL) > 0;
+  bool ledPhysOn = ledcRead(LED_PWM_CHANNEL) > 0;
 
   String s;
   s += "🌿 ESTADO\n";
@@ -815,8 +809,7 @@ String formatStatusFull() {
   s += "💨 Aire: " + String(mq) + "   🌱 Suelo: " + String(soilPct) + "%\n";
   s += "🌬️ Fan: " + String(fanPercent) + "%  [" + (fanAuto ? "AUTO" : "MANUAL") + "]\n";
   s += "☀️ Luz: " + String(areLightsOn() ? "ON" : "OFF") + "   apaga " + formatLightsOffTime() + "\n";
-  s += "🟣 LED: " + (ledOn ? String(getLedIntensity()) + "%" : String("OFF"));
-  s += "  [" + String(ledMode == 0 ? "AUTO" : ledMode == 1 ? "ON" : "OFF") + "]\n";
+  s += "🟣 LED: " + (ledPhysOn ? String(getLedIntensity()) + "%" : String("OFF")) + "\n";
   s += "💧 Riego: " + formatLastIrrigation() + "\n";
   s += "🤖 Auto: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF");
   s += "   " + String(stageMl, 0) + " mL prog.\n";
@@ -869,7 +862,7 @@ String commandHelp() {
   h += "maceta [litros]\n";
   h += "ml [etapa] [valor]\n";
   h += "luz [etapa] [horas]\n";
-  h += "led [on|off|auto|0-100] - LED morado\n";
+  h += "led [on|off|0-100] - LED morado (sigue horario de luz)\n";
   h += "suelomin [%] / suelomax [%]\n";
   h += "calsuelo [SECO] [HUMEDO]\n";
   h += "timezone [offset]\n";
@@ -1021,34 +1014,19 @@ String handleCommand(const String &chatId, const String &raw) {
 
   if (cmd == "led") {
     if (args.isEmpty()) {
-      bool on = (ledcRead(LED_PWM_CHANNEL) > 0);
-      String modeStr = ledMode == 0 ? "auto" : ledMode == 1 ? "forzado ON" : "forzado OFF";
-      return String("🟣 LED: ") + (on ? "ON" : "OFF") +
-             " | " + modeStr +
+      return String("🟣 LED: ") + (ledOn ? "ON" : "OFF") +
              " | Brillo: " + String(getLedIntensity()) + "%";
-    }
-    String argsL = args; argsL.toLowerCase();
-    if (argsL == "auto") {
-      ledMode = 0;
-      applyLightSchedule();
-      return "🟣 LED: modo automatico\n"
-             "(se enciende solo en pre-flo, flo y fin)";
     }
     int pct = args.toInt();
     if (args == String(pct) && pct >= 0 && pct <= 100) {
-      if (pct == 0) {
-        ledMode = 2;
-      } else {
-        setLedIntensity(pct);
-        ledMode = 1;
-      }
+      if (pct > 0) setLedIntensity(pct);
+      ledOn = (pct > 0);
       applyLightSchedule();
-      return String("🟣 LED: ") + (pct == 0 ? "apagado (forzado)" : String(pct) + "% ✅");
+      return String("🟣 LED: ") + (ledOn ? String(pct) + "% ✅" : "apagado");
     }
-    bool on = parseOnOff(args);
-    ledMode = on ? 1 : 2;
+    ledOn = parseOnOff(args);
     applyLightSchedule();
-    return String("🟣 LED: ") + (on ? "encendido ✅" : "apagado");
+    return String("🟣 LED: ") + (ledOn ? "encendido ✅" : "apagado");
   }
 
   if (cmd == "suelomin") {
