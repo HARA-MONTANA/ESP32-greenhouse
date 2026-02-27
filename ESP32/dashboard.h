@@ -38,6 +38,10 @@ nav{display:flex;gap:3px}
 .hdr-right{display:flex;align-items:center;gap:10px;margin-left:auto;font-size:.75rem;color:var(--text2)}
 #ws-dot{width:8px;height:8px;border-radius:50%;background:var(--c4);flex-shrink:0}
 #ws-dot.ok{background:var(--neon)}
+#luz-status{font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:10px;
+  background:rgba(255,255,255,.05);color:var(--text2);border:1px solid rgba(255,255,255,.08);white-space:nowrap}
+#luz-status.luz-on{background:#ffea0018;color:#ffea00;border-color:#ffea0040}
+#luz-status.luz-off{background:rgba(255,255,255,.05);color:var(--text2);border-color:rgba(255,255,255,.08)}
 /* Main */
 main{max-width:1200px;margin:0 auto;padding:var(--gap)}
 /* Card */
@@ -202,6 +206,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
   </div>
   <div class="hdr-right">
     <span id="ip-lbl"></span>
+    <span id="luz-status" class="luz-off" title="Estado luz principal">&#9675; LUZ</span>
     <span id="clock">--:--:--</span>
     <span id="ws-dot" title="WebSocket"></span>
   </div>
@@ -376,6 +381,16 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
         <button class="btn btn-o" onclick="sc({cmd:'regar',args:document.getElementById('irr-ml').value},this)">Regar</button>
       </div>
       <div class="tank" id="tank">&#11036; Tanque: ---</div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <div style="font-size:.7rem;color:var(--text2);margin-bottom:5px">&#9881; Calibraci&#243;n bomba</div>
+      <div id="irr-pump-st" style="font-size:.72rem;margin-bottom:6px;color:var(--text2)">&#11036; Sin datos</div>
+      <div class="ctrl-row">
+        <button class="btn btn-d" onclick="calPump(this)">Calibrar 5s</button>
+      </div>
+      <div class="irow" style="margin-top:6px">
+        <input type="number" id="irr-caudal-ml" min="1" max="9999" placeholder="mL recolectados">
+        <button class="btn btn-o" onclick="sc({cmd:'caudal',args:document.getElementById('irr-caudal-ml').value},this)">Guardar</button>
+      </div>
     </div>
 
   </div><!-- /actions-section -->
@@ -680,6 +695,11 @@ function onWs(d){
     if(inp&&!inp._dirty)inp.value=d.bot_name;
     updateBotLink(d.bot_name);
   }
+  var lz=document.getElementById('luz-status');
+  if(lz&&d.light_on!==undefined){
+    lz.className=d.light_on?'luz-on':'luz-off';
+    lz.textContent=d.light_on?'\u25CF LUZ':'\u25CB LUZ';
+  }
   gauge('temp',d.temp_c,0,50,V.tWarn-6,V.tWarn);
   gauge('rh',d.rh_pct,0,100,V.rhL,V.rhH);
   gauge('soil',d.soil_pct,0,100,V.slL,80);
@@ -792,6 +812,8 @@ function syncCtrl(d){
   if(d.pump_calibrated!==undefined){
     var ps=document.getElementById('pump-st');
     if(ps)ps.textContent=d.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
+    var ips=document.getElementById('irr-pump-st');
+    if(ips)ips.textContent=d.pump_calibrated?'\u2705 Calibrada':'\u26A0\uFE0F Sin calibrar';
     setPumpTag(d.pump_calibrated);
   }
 }
@@ -1162,7 +1184,7 @@ function drawRpmChart(){
   var tMin=now-SPK_WIN;
   var vals=rpmHist.map(function(p){return p.v;});
   var mn=0,mx=Math.max.apply(null,vals);
-  if(mx<100)mx=100;
+  if(mx<300)mx=300;
   function tx(t){return (ML+(t-tMin)/SPK_WIN*PW).toFixed(1);}
   function ty(v){return (MT+PH-((v-mn)/(mx-mn))*PH).toFixed(1);}
   var s='';
@@ -1223,8 +1245,12 @@ function drawSpk(key){
   var vals=h.map(function(p){return p.v;});
   var mn=Math.min.apply(null,vals);
   var mx=Math.max.apply(null,vals);
-  if(mx===mn){mn=Math.max(0,mn-1);mx=mx+1;}
+  // Rango minimo por sensor para evitar que variaciones pequenas dominen el grafico
+  var minSpan={temp:5,rh:10,soil:10,mq:300,'soil-raw':400,'fan-rpm':200}[key]||5;
+  if((mx-mn)<minSpan){var mid=(mn+mx)/2;mn=mid-minSpan/2;mx=mid+minSpan/2;}
+  if(key!=='temp'&&mn<0)mn=0;
   var vRange=mx-mn;
+  if(vRange===0)vRange=1;
   function tx(t){return (ML+(t-tMin)/SPK_WIN*PW).toFixed(1);}
   function ty(v){return (MT+PH-((v-mn)/vRange)*PH).toFixed(1);}
   function fmtV(v){if(v%1===0)return ''+v;if(Math.abs(v)>=10)return v.toFixed(0);return v.toFixed(1);}
