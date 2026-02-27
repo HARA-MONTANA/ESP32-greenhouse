@@ -101,7 +101,7 @@ const int LED_PWM_CHANNEL = 1;
 const int LED_PWM_FREQ    = 1000;
 const int LED_PWM_RES     = 8;
 const int LED_PWM_MAX     = 255;
-bool ledManual = false;  // true = encender independiente de etapa (respeta horario)
+bool ledOn = false;  // true = sigue el horario de luz, false = apagado
 
 // Luces
 const int LIGHTS_ON_HOUR = 6;
@@ -309,7 +309,7 @@ void broadcastSensorData() {
   doc["fan_auto"]    = fanAuto;
   doc["light_on"]    = areLightsOn();
   doc["led_pct"]     = getLedIntensity();
-  doc["led_manual"]  = ledManual;
+  doc["led_on"]      = (ledcRead(LED_PWM_CHANNEL) > 0);
   doc["auto_irr"]    = isAutoIrrigationEnabled();
   doc["tank_ok"]     = isTankWaterAvailable();
   // Alerts
@@ -624,8 +624,8 @@ void applyLightSchedule() {
   plantStage stage = getCurrentStage();
   time_t offTs = startTs + getLightHoursForStage(stage) * 3600L;
 
-  bool shouldBeOn    = nowTs >= startTs && nowTs < offTs;
-  bool ledShouldBeOn = shouldBeOn && ledManual;
+  bool shouldBeOn = nowTs >= startTs && nowTs < offTs;
+  bool ledShouldBeOn = shouldBeOn && ledOn;
 
   static bool prevLightOn = false;
   if (shouldBeOn != prevLightOn) {
@@ -661,7 +661,7 @@ void evaluateAlerts() {
 
   bool water = isTankWaterAvailable();
   if (!water && !alertWater) {
-    broadcastMessage("ALERTA: tanque sin agua");
+    broadcastMessage("🚨 ALERTA: tanque sin agua");
     logAccionConSensores("ALERTA_ON", "tanque sin agua",
                          ok ? tempC : NAN, ok ? rh : NAN, soilPct, mqRaw);
     alertWater = true;
@@ -679,7 +679,7 @@ void evaluateAlerts() {
   if (ok) {
     bool tempHigh = getTempAlertThreshold() > 0 && tempC >= getTempAlertThreshold();
     if (tempHigh && !alertTempHigh) {
-      broadcastMessage("ALERTA: temp alta (" + String(tempC, 1) + "C >= " + String(getTempAlertThreshold()) + "C)");
+      broadcastMessage("🚨🌡️ ALERTA: temp alta (" + String(tempC, 1) + "C >= " + String(getTempAlertThreshold()) + "C)");
       logAccionConSensores("ALERTA_ON",
                            "temp alta (" + String(tempC, 1) + "C >= " + String(getTempAlertThreshold()) + "C)",
                            tempC, rh, soilPct, mqRaw);
@@ -698,7 +698,7 @@ void evaluateAlerts() {
     bool lowRhStage = (stage == PLANTULA || stage == VEGETATIVO);
     bool rhLow = lowRhStage && getRhLowAlertThreshold() > 0 && rh < getRhLowAlertThreshold();
     if (rhLow && !alertRhLow) {
-      broadcastMessage("ALERTA: humedad baja (" + String(rh, 0) + "% < " + String(getRhLowAlertThreshold()) + "%)");
+      broadcastMessage("🚨💧 ALERTA: humedad baja (" + String(rh, 0) + "% < " + String(getRhLowAlertThreshold()) + "%)");
       logAccionConSensores("ALERTA_ON",
                            "humedad baja (" + String(rh, 0) + "% < " + String(getRhLowAlertThreshold()) + "%)",
                            tempC, rh, soilPct, mqRaw);
@@ -717,7 +717,7 @@ void evaluateAlerts() {
     bool highRhStage = (stage == PRE_FLORACION || stage == FLORACION || stage == FINAL);
     bool rhHigh = highRhStage && getRhHighAlertThreshold() > 0 && rh > getRhHighAlertThreshold();
     if (rhHigh && !alertRhHigh) {
-      broadcastMessage("ALERTA: humedad alta (" + String(rh, 0) + "% > " + String(getRhHighAlertThreshold()) + "%)");
+      broadcastMessage("🚨💧 ALERTA: humedad alta (" + String(rh, 0) + "% > " + String(getRhHighAlertThreshold()) + "%)");
       logAccionConSensores("ALERTA_ON",
                            "humedad alta (" + String(rh, 0) + "% > " + String(getRhHighAlertThreshold()) + "%)",
                            tempC, rh, soilPct, mqRaw);
@@ -743,7 +743,7 @@ void evaluateAlerts() {
 
   bool poorAir = getMqAlertThreshold() > 0 && mqRaw >= getMqAlertThreshold();
   if (poorAir && !alertMq) {
-    broadcastMessage("ALERTA: aire pobre (MQ=" + String(mqRaw) + " >= " + String(getMqAlertThreshold()) + ")");
+    broadcastMessage("🚨💨 ALERTA: aire pobre (MQ=" + String(mqRaw) + " >= " + String(getMqAlertThreshold()) + ")");
     logAccionConSensores("ALERTA_ON",
                          "aire pobre (MQ=" + String(mqRaw) + " >= " + String(getMqAlertThreshold()) + ")",
                          ok ? tempC : NAN, ok ? rh : NAN, soilPct, mqRaw);
@@ -776,17 +776,16 @@ String formatStatusCompact() {
   String lastRiego = formatLastIrrigation();
   String riegoHora = (lastRiego == "Sin registro") ? "--:--" : lastRiego.substring(0, 5);
 
-  bool ledOn = ledcRead(LED_PWM_CHANNEL) > 0;
+  bool ledPhysOn = ledcRead(LED_PWM_CHANNEL) > 0;
 
   String s;
   s += "ESTADO\n";
   s += "T:" + (ok ? String(temp, 1) + "C" : String("N/D"));
   s += " HR:" + (ok ? String(rh, 0) + "%" : String("N/D")) + "\n";
   s += "MQ:" + String(mq) + " S:" + String(soilPct) + "%\n";
-  s += "Fan:" + String(fanPercent) + "% [" + (fanAuto ? "A" : "M") + "]\n";
-  s += "Luz:" + String(areLightsOn() ? "ON" : "OFF") + "->" + formatLightsOffTime() + "\n";
-  s += "LED:" + (ledOn ? String(getLedIntensity()) + "%" : String("OFF"));
-  s += " [" + String(ledManual ? "M" : "A") + "]\n";
+  s += "💨 Fan:" + String(fanPercent) + "% [" + (fanAuto ? "A" : "M") + "]\n";
+  s += "☀️ Luz:" + String(areLightsOn() ? "ON" : "OFF") + "->" + formatLightsOffTime() + "\n";
+  s += "🟣 LED:" + (ledPhysOn ? String(getLedIntensity()) + "%" : String("OFF")) + "\n";
   s += "Riego:" + riegoHora + " [" + String(isAutoIrrigationEnabled() ? "A" : "M") + "]\n";
   s += "Agua:" + String(water ? "SI" : "NO") + " [" + stageToShort(getCurrentStage()) + "]";
   return s;
@@ -801,22 +800,21 @@ String formatStatusFull() {
   int soilPct = soilPercentFromAdc(soilAdc);
   bool water = isTankWaterAvailable();
   float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
-  bool ledOn = ledcRead(LED_PWM_CHANNEL) > 0;
+  bool ledPhysOn = ledcRead(LED_PWM_CHANNEL) > 0;
 
   String s;
-  s += "== ESTADO ==\n";
-  s += "Temp: " + (ok ? String(temp, 1) + "C" : String("N/D"));
-  s += "   HR: " + (ok ? String(rh, 0) + "%" : String("N/D")) + "\n";
-  s += "Aire: " + String(mq) + "   Suelo: " + String(soilPct) + "%\n";
-  s += "Fan: " + String(fanPercent) + "%  [" + (fanAuto ? "AUTO" : "MANUAL") + "]\n";
-  s += "Luz: " + String(areLightsOn() ? "ON" : "OFF") + "   apaga " + formatLightsOffTime() + "\n";
-  s += "LED morado: " + (ledOn ? String(getLedIntensity()) + "%" : String("OFF"));
-  s += "  [" + String(ledManual ? "MANUAL" : "AUTO") + "]\n";
-  s += "Riego: " + formatLastIrrigation() + "\n";
-  s += "Auto: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF");
+  s += "🌿 ESTADO\n";
+  s += "🌡️ Temp: " + (ok ? String(temp, 1) + "C" : String("N/D"));
+  s += "   💧 HR: " + (ok ? String(rh, 0) + "%" : String("N/D")) + "\n";
+  s += "💨 Aire: " + String(mq) + "   🌱 Suelo: " + String(soilPct) + "%\n";
+  s += "🌬️ Fan: " + String(fanPercent) + "%  [" + (fanAuto ? "AUTO" : "MANUAL") + "]\n";
+  s += "☀️ Luz: " + String(areLightsOn() ? "ON" : "OFF") + "   apaga " + formatLightsOffTime() + "\n";
+  s += "🟣 LED: " + (ledPhysOn ? String(getLedIntensity()) + "%" : String("OFF")) + "\n";
+  s += "💧 Riego: " + formatLastIrrigation() + "\n";
+  s += "🤖 Auto: " + String(isAutoIrrigationEnabled() ? "ON" : "OFF");
   s += "   " + String(stageMl, 0) + " mL prog.\n";
-  s += "Agua: " + String(water ? "SI" : "NO");
-  s += "   Etapa: " + stageToString(getCurrentStage());
+  s += "🪣 Agua: " + String(water ? "SI" : "NO");
+  s += "   🌱 Etapa: " + stageToString(getCurrentStage());
   return s;
 }
 
@@ -828,20 +826,20 @@ String formatConfig() {
   float stageMl = getMlPerLiterForStage(stage) * potL;
 
   String s;
-  s += "== CONFIGURACION ==\n";
-  s += "Etapa: " + stageToString(stage) + "\n";
-  s += "Maceta: " + String(potL, 1) + " L   " + String(stageMl, 0) + " mL/riego\n";
-  s += "Suelo: min " + String(getSoilThreshold()) + "%   max " + String(getSoilHighThreshold()) + "%\n";
-  s += "mL/L: PL=" + String(getMlPerLiterForStage(PLANTULA));
+  s += "⚙️ CONFIGURACION\n";
+  s += "🌱 Etapa: " + stageToString(stage) + "\n";
+  s += "🪴 Maceta: " + String(potL, 1) + " L   " + String(stageMl, 0) + " mL/riego\n";
+  s += "🌱 Suelo: min " + String(getSoilThreshold()) + "%   max " + String(getSoilHighThreshold()) + "%\n";
+  s += "💧 mL/L: PL=" + String(getMlPerLiterForStage(PLANTULA));
   s += " VEG=" + String(getMlPerLiterForStage(VEGETATIVO));
   s += " PRE=" + String(getMlPerLiterForStage(PRE_FLORACION));
   s += " FLO=" + String(getMlPerLiterForStage(FLORACION));
   s += " FIN=" + String(getMlPerLiterForStage(FINAL)) + "\n";
-  s += "Alertas:\n";
-  s += "  Temp > " + String(getTempAlertThreshold()) + "C\n";
-  s += "  HR: " + String(getRhLowAlertThreshold()) + "% - " + String(getRhHighAlertThreshold()) + "%\n";
-  s += "  Aire > " + String(getMqAlertThreshold()) + "\n";
-  s += "Hora: " + now;
+  s += "🚨 Alertas:\n";
+  s += "  🌡️ Temp > " + String(getTempAlertThreshold()) + "C\n";
+  s += "  💧 HR: " + String(getRhLowAlertThreshold()) + "% - " + String(getRhHighAlertThreshold()) + "%\n";
+  s += "  💨 Aire > " + String(getMqAlertThreshold()) + "\n";
+  s += "🕐 Hora: " + now;
   return s;
 }
 
@@ -851,29 +849,29 @@ String formatConfig() {
 
 String commandHelp() {
   String h;
-  h += "== Uso diario ==\n";
+  h += "🌿 Uso diario\n";
   h += "estado - Estado actual\n";
   h += "regar [mL] - Riego manual\n";
   h += "autoriego [on|off] - Riego automatico\n";
   h += "vent [0-100] - Ventilador manual\n";
   h += "ventauto [on|off] - Ventilador automatico\n";
   h += "reportes [on|off] [min] [compacto|completo]\n";
-  h += "\n== Configuracion ==\n";
+  h += "\n⚙️ Configuracion\n";
   h += "config/ajustes - Ver ajustes\n";
   h += "etapa [pl|veg|pre|flo|fin]\n";
   h += "maceta [litros]\n";
   h += "ml [etapa] [valor]\n";
   h += "luz [etapa] [horas]\n";
-  h += "led [on|off|0-100] - LED morado manual (respeta horario)\n";
+  h += "led [on|off|0-100] - LED morado (sigue horario de luz)\n";
   h += "suelomin [%] / suelomax [%]\n";
   h += "calsuelo [SECO] [HUMEDO]\n";
   h += "timezone [offset]\n";
-  h += "\n== Alertas ==\n";
+  h += "\n🚨 Alertas\n";
   h += "tempmax [C] / hummin [%] / hummax [%] / airemax [N]\n";
-  h += "\n== Bomba ==\n";
+  h += "\n🔧 Bomba\n";
   h += "calibrar - Bomba 5s para medir\n";
   h += "caudal [mL] - Guardar volumen medido\n";
-  h += "\n== Admin ==\n";
+  h += "\n🔐 Admin\n";
   h += "acceso [on|off] - Abrir/cerrar inscripcion (toggle sin argumento)\n";
   h += "addid [ID] / delid [ID] / ids\n";
   h += "reset - Restablecer configuracion\n";
@@ -909,20 +907,20 @@ String handleCommand(const String &chatId, const String &raw) {
 
   if (cmd == "regar") {
     float ml = args.toFloat();
-    if (ml <= 0) return "Uso: regar [mL]";
+    if (ml <= 0) return "⚠️ Uso: regar [mL]";
     ml = min(ml, 1500.0f);
-    if (!isPumpCalibrated()) return "Bomba sin calibrar. Usa: calibrar";
-    if (!isTankWaterAvailable()) return "Tanque sin agua.";
+    if (!isPumpCalibrated()) return "⚠️ Bomba sin calibrar. Usa: calibrar";
+    if (!isTankWaterAvailable()) return "🪣 Tanque sin agua.";
     irrigateVolume(ml, readSoilMoisture());
-    return "Riego manual: " + String(ml) + " mL";
+    return "💧 Riego manual: " + String(ml) + " mL";
   }
 
   if (cmd == "autoriego") {
-    if (args.isEmpty()) return String("Riego auto: ") + (isAutoIrrigationEnabled() ? "ON" : "OFF");
+    if (args.isEmpty()) return String("💧 Riego auto: ") + (isAutoIrrigationEnabled() ? "ON" : "OFF");
     bool enable = parseOnOff(args);
     setAutoIrrigationEnabled(enable);
     logAccion("CMD", String("autoriego ") + (enable ? "on" : "off"));
-    return String("Riego auto ") + (isAutoIrrigationEnabled() ? "activado" : "desactivado");
+    return String("💧 Riego auto ") + (isAutoIrrigationEnabled() ? "activado ✅" : "desactivado");
   }
 
   if (cmd == "vent") {
@@ -931,24 +929,24 @@ String handleCommand(const String &chatId, const String &raw) {
     fanAuto = false;
     updateFan(true);
     logAccion("VENT", "manual " + String(pct) + "%");
-    return "Fan manual: " + String(pct) + "%";
+    return "🌬️ Fan manual: " + String(pct) + "%";
   }
 
   if (cmd == "ventauto") {
-    if (args.isEmpty()) return String("Fan auto: ") + (fanAuto ? "ON" : "OFF");
+    if (args.isEmpty()) return String("🌬️ Fan auto: ") + (fanAuto ? "ON" : "OFF");
     fanAuto = parseOnOff(args);
     updateFan(true);
     logAccion("VENT", fanAuto ? "auto activado" : "auto desactivado");
-    return String("Fan auto ") + (fanAuto ? "ON" : "OFF");
+    return String("🌬️ Fan auto ") + (fanAuto ? "ON ✅" : "OFF");
   }
 
   if (cmd == "reportes") {
-    if (chatId.isEmpty()) return "Reportes solo disponibles via Telegram.";
+    if (chatId.isEmpty()) return "📊 Reportes solo disponibles via Telegram.";
     bool sub = reportSubscribers.count(chatId) > 0;
     if (args.isEmpty()) {
-      if (!sub) return "Tus reportes: OFF";
+      if (!sub) return "📊 Tus reportes: OFF";
       ReportSub &r = reportSubscribers[chatId];
-      return String("Tus reportes: ON | ") + String(r.intervalMs / 60000) + " min" +
+      return String("📊 Tus reportes: ON | ") + String(r.intervalMs / 60000) + " min" +
              " | Modo: " + (r.compact ? "compacto" : "completo");
     }
     bool enabled = parseOnOff(args);
@@ -969,9 +967,9 @@ String handleCommand(const String &chatId, const String &raw) {
     }
     if (!enabled) {
       reportSubscribers.erase(chatId);
-      return "Tus reportes: OFF";
+      return "📊 Tus reportes: OFF";
     }
-    return String("Tus reportes: ON | ") + String(r.intervalMs / 60000) + " min" +
+    return String("📊 Tus reportes: ON ✅ | ") + String(r.intervalMs / 60000) + " min" +
            " | Modo: " + (r.compact ? "compacto" : "completo");
   }
 
@@ -980,121 +978,115 @@ String handleCommand(const String &chatId, const String &raw) {
   if (cmd == "etapa" || cmd == "stage") {
     if (args.isEmpty()) return "Uso: etapa [pl|veg|pre|flo|fin]";
     updateStage(stageFromString(args));
+    applyLightSchedule();
     configSave();
     logAccion("CMD", "etapa " + stageToString(getCurrentStage()));
-    return "Etapa: " + stageToString(getCurrentStage());
+    return "🌱 Etapa: " + stageToString(getCurrentStage());
   }
 
   if (cmd == "maceta") {
     float l = args.toFloat();
-    if (l <= 0) return "Uso: maceta [litros]";
-    if (!setPotVolumeL(l)) return "Rango: 1-50 L";
-    return "Maceta: " + String(l, 1) + " L";
+    if (l <= 0) return "⚠️ Uso: maceta [litros]";
+    if (!setPotVolumeL(l)) return "❌ Rango: 1-50 L";
+    return "🪴 Maceta: " + String(l, 1) + " L";
   }
 
   if (cmd == "ml") {
     int sp2 = args.indexOf(' ');
-    if (sp2 == -1) return "Uso: ml [etapa] [valor]";
+    if (sp2 == -1) return "⚠️ Uso: ml [etapa] [valor]";
     plantStage stage = stageFromString(args.substring(0, sp2));
     int val = args.substring(sp2 + 1).toInt();
-    if (!setMlPerLiterForStage(stage, val)) return "Rango mL/L: 5-200";
-    return "mL/L " + args.substring(0, sp2) + ": " + String(val);
+    if (!setMlPerLiterForStage(stage, val)) return "❌ Rango mL/L: 5-200";
+    return "💧 mL/L " + args.substring(0, sp2) + ": " + String(val);
   }
 
   if (cmd == "luz") {
     int sp2 = args.indexOf(' ');
-    if (sp2 == -1) return "Uso: luz [etapa] [horas]";
+    if (sp2 == -1) return "⚠️ Uso: luz [etapa] [horas]";
     plantStage stage = stageFromString(args.substring(0, sp2));
     int hours = args.substring(sp2 + 1).toInt();
     if (stage == PRE_FLORACION || stage == FLORACION || stage == FINAL) {
-      return "Pre/flo/fin fijas en 12h.";
+      return "☀️ Pre/flo/fin fijas en 12h.";
     }
-    if (!setLightHoursForStage(stage, hours)) return "Rango: 12-20 h";
-    return "Luz " + args.substring(0, sp2) + ": " + String(hours) + " h";
+    if (!setLightHoursForStage(stage, hours)) return "❌ Rango: 12-20 h";
+    return "☀️ Luz " + args.substring(0, sp2) + ": " + String(hours) + " h";
   }
 
   if (cmd == "led") {
     if (args.isEmpty()) {
-      bool on = (ledcRead(LED_PWM_CHANNEL) > 0);
-      return String("LED morado: ") + (on ? "ON" : "OFF") +
-             " | Modo: " + (ledManual ? "MANUAL" : "AUTO") +
+      return String("🟣 LED: ") + (ledOn ? "ON" : "OFF") +
              " | Brillo: " + String(getLedIntensity()) + "%";
     }
     int pct = args.toInt();
     if (args == String(pct) && pct >= 0 && pct <= 100) {
-      if (pct == 0) {
-        ledManual = false;
-      } else {
-        setLedIntensity(pct);
-        ledManual = true;
-      }
+      if (pct > 0) setLedIntensity(pct);
+      ledOn = (pct > 0);
       applyLightSchedule();
-      return String("LED morado brillo: ") + String(pct) + "%" +
-             (pct == 0 ? " (auto)" : " (manual, sigue horario)");
+      return String("🟣 LED: ") + (ledOn ? String(pct) + "% ✅" : "apagado");
     }
-    ledManual = parseOnOff(args);
+    ledOn = parseOnOff(args);
     applyLightSchedule();
-    return String("LED morado: ") + (ledManual ? "ON manual (sigue horario)" : "auto por etapa");
+    return String("🟣 LED: ") + (ledOn ? "encendido ✅" : "apagado");
   }
 
   if (cmd == "suelomin") {
     int pct = args.toInt();
-    if (!setSoilThreshold(pct)) return "Rango: 0-50%";
-    return "Suelo min: " + String(pct) + "%";
+    if (!setSoilThreshold(pct)) return "❌ Rango: 0-50%";
+    return "🌱 Suelo min: " + String(pct) + "%";
   }
 
   if (cmd == "suelomax") {
     int pct = args.toInt();
-    if (!setSoilHighThreshold(pct)) return "Rango: 50-100%";
-    return "Suelo max: " + String(pct) + "%";
+    if (!setSoilHighThreshold(pct)) return "❌ Rango: 50-100%";
+    return "🌱 Suelo max: " + String(pct) + "%";
   }
 
   if (cmd == "calsuelo") {
     int sp2 = args.indexOf(' ');
-    if (sp2 == -1) return "Uso: calsuelo [SECO] [HUMEDO]";
+    if (sp2 == -1) return "⚠️ Uso: calsuelo [SECO] [HUMEDO]";
     int dry = args.substring(0, sp2).toInt();
     int wet = args.substring(sp2 + 1).toInt();
     setSoilCalibration(dry, wet);
-    return "Calibracion suelo: seco=" + String(getSoilDryAdc()) + " humedo=" + String(getSoilWetAdc());
+    return "🌱 Calibracion suelo: seco=" + String(getSoilDryAdc()) + " humedo=" + String(getSoilWetAdc());
   }
 
   if (cmd == "timezone" || cmd == "tz") {
-    if (args.isEmpty()) return "Timezone actual: UTC" + String(getTimezoneOffsetHours());
+    if (args.isEmpty()) return "🕐 Timezone actual: UTC" + String(getTimezoneOffsetHours());
     int offset = constrain(args.toInt(), -12, 14);
     setTimezoneOffsetHours(offset);
     configureTimezone();
     syncNtp();
-    return "Timezone: UTC" + String(offset);
+    return "🕐 Timezone: UTC" + String(offset);
   }
 
   // --- Alertas ---
 
   if (cmd == "tempmax") {
     int val = args.toInt();
-    if (val <= 0) return "Uso: tempmax [C]";
+    if (val <= 0) return "⚠️ Uso: tempmax [C]";
     setTempAlertThreshold(val);
-    return "Alerta temp: " + String(getTempAlertThreshold()) + "C";
+    return "🌡️ Alerta temp: " + String(getTempAlertThreshold()) + "C";
   }
 
   if (cmd == "hummin") {
     int val = args.toInt();
-    if (val <= 0) return "Uso: hummin [%]";
+    if (val <= 0) return "⚠️ Uso: hummin [%]";
     setRhLowAlertThreshold(val);
-    return "Alerta HR baja: " + String(getRhLowAlertThreshold()) + "%";
+    return "💧 Alerta HR baja: " + String(getRhLowAlertThreshold()) + "%";
   }
 
   if (cmd == "hummax") {
     int val = args.toInt();
-    if (val <= 0) return "Uso: hummax [%]";
+    if (val <= 0) return "⚠️ Uso: hummax [%]";
     setRhHighAlertThreshold(val);
-    return "Alerta HR alta: " + String(getRhHighAlertThreshold()) + "%";
+    return "💧 Alerta HR alta: " + String(getRhHighAlertThreshold()) + "%";
   }
 
   if (cmd == "airemax") {
     int val = args.toInt();
-    if (val <= 0) return "Uso: airemax [N]";
+    if (val <= 0) return "⚠️ Uso: airemax [N]";
     setMqAlertThreshold(val);
-    return "Alerta MQ: " + String(getMqAlertThreshold());
+    return "💨 Alerta MQ: " + String(getMqAlertThreshold());
   }
 
   // --- Bomba ---
@@ -1103,42 +1095,42 @@ String handleCommand(const String &chatId, const String &raw) {
     pumpOn();
     delay(5000);
     pumpOff();
-    return "Bomba activada 5s. Mide el volumen y envia: caudal [mL]";
+    return "🔧 Bomba activada 5s. Mide el volumen y envia: caudal [mL]";
   }
 
   if (cmd == "caudal") {
     float ml = args.toFloat();
-    if (ml <= 0) return "Uso: caudal [mL medidos]";
+    if (ml <= 0) return "⚠️ Uso: caudal [mL medidos]";
     float flow = ml / 5.0f;
-    if (!setPumpFlow(flow)) return "Caudal fuera de rango (1-50 mL/s)";
+    if (!setPumpFlow(flow)) return "❌ Caudal fuera de rango (1-50 mL/s)";
     setAutoIrrigationEnabled(false);
-    return "Caudal: " + String(flow, 1) + " mL/s. Usa: autoriego on";
+    return "🔧 Caudal: " + String(flow, 1) + " mL/s. Usa: autoriego on";
   }
 
   // --- Admin ---
 
   if (cmd == "addid") {
-    if (authorizedChatIds.size() >= 5) return "Maximo 5 IDs.";
-    if (args.isEmpty()) return "Uso: addid [ID]";
+    if (authorizedChatIds.size() >= 5) return "❌ Maximo 5 IDs.";
+    if (args.isEmpty()) return "⚠️ Uso: addid [ID]";
     authorizedChatIds.push_back(args);
     persistChatIds();
-    return "ID agregado.";
+    return "✅ ID agregado.";
   }
 
   if (cmd == "delid") {
-    if (args.isEmpty()) return "Uso: delid [ID]";
+    if (args.isEmpty()) return "⚠️ Uso: delid [ID]";
     for (auto it = authorizedChatIds.begin(); it != authorizedChatIds.end(); ++it) {
       if (*it == args) {
         authorizedChatIds.erase(it);
         persistChatIds();
-        return "ID eliminado.";
+        return "🗑️ ID eliminado.";
       }
     }
-    return "ID no encontrado.";
+    return "❌ ID no encontrado.";
   }
 
   if (cmd == "ids") {
-    String r = "IDs autorizados:\n";
+    String r = "🔑 IDs autorizados:\n";
     for (size_t i = 0; i < authorizedChatIds.size(); i++) {
       r += String(i + 1) + ": " + authorizedChatIds[i] + "\n";
     }
@@ -1146,7 +1138,7 @@ String handleCommand(const String &chatId, const String &raw) {
   }
 
   if (cmd == "acceso") {
-    if (authorizedChatIds.size() >= 5) return "Maximo de IDs alcanzado (5). Elimina uno con delid antes de abrir acceso.";
+    if (authorizedChatIds.size() >= 5) return "❌ Maximo de IDs alcanzado (5). Elimina uno con delid antes de abrir acceso.";
     if (args == "on") {
       enrollmentOpen = true;
     } else if (args == "off") {
@@ -1155,22 +1147,22 @@ String handleCommand(const String &chatId, const String &raw) {
       enrollmentOpen = !enrollmentOpen;
     }
     if (enrollmentOpen)
-      return "Acceso ABIERTO. El proximo chat desconocido que escriba sera agregado y el acceso se cerrara automaticamente.";
-    return "Acceso CERRADO. Solo IDs autorizados pueden interactuar.";
+      return "🔓 Acceso ABIERTO. El proximo chat desconocido que escriba sera agregado y el acceso se cerrara automaticamente.";
+    return "🔒 Acceso CERRADO. Solo IDs autorizados pueden interactuar.";
   }
 
   if (cmd == "reset") {
     logAccion("CMD", "reset de configuracion");
     configReset();
-    return "Configuracion restablecida.";
+    return "♻️ Configuracion restablecida.";
   }
 
   // --- Sleep WiFi ---
 
   if (cmd == "dormir" || cmd == "sleep") {
     if (args.isEmpty()) {
-      if (!wifiSleepMode) return "Sleep WiFi: OFF (WiFi siempre activo)";
-      return "Sleep WiFi: ON | Poll Telegram cada " + String(wifiSleepPollMs / 60000) + " min\n"
+      if (!wifiSleepMode) return "😴 Sleep WiFi: OFF (WiFi siempre activo)";
+      return "😴 Sleep WiFi: ON | Poll Telegram cada " + String(wifiSleepPollMs / 60000) + " min\n"
              "Modem duerme entre polls. Sensores/riego/luces: OK.";
     }
     int sp2 = args.indexOf(' ');
@@ -1179,7 +1171,7 @@ String handleCommand(const String &chatId, const String &raw) {
     if (sw == "off") {
       wifiSleepMode = false;
       setWifiPowerSave(false);
-      return "Sleep WiFi: OFF. WiFi en modo normal.";
+      return "😴 Sleep WiFi: OFF. WiFi en modo normal.";
     }
     if (sw == "on") {
       if (sp2 != -1) {
@@ -1187,30 +1179,30 @@ String handleCommand(const String &chatId, const String &raw) {
         if (mins > 0) wifiSleepPollMs = (unsigned long)mins * 60000UL;
       }
       wifiSleepMode = true;
-      return "Sleep WiFi: ON | Telegram cada " + String(wifiSleepPollMs / 60000) + " min\n"
+      return "😴 Sleep WiFi: ON ✅ | Telegram cada " + String(wifiSleepPollMs / 60000) + " min\n"
              "Modem duerme entre polls. Sensores/riego/luces siguen activos.";
     }
-    return "Uso: dormir [on|off] [minutos 1-60]";
+    return "⚠️ Uso: dormir [on|off] [minutos 1-60]";
   }
 
   // --- Google Drive ---
 
   if (cmd == "gdrive") {
     if (args.isEmpty()) {
-      if (!gdriveIsEnabled()) return "Google Drive: desactivado. Usa: gdrive <url>";
-      return "Google Drive: activo\nURL: " + gdriveGetUrl();
+      if (!gdriveIsEnabled()) return "📊 Google Drive: desactivado. Usa: gdrive <url>";
+      return "📊 Google Drive: activo\nURL: " + gdriveGetUrl();
     }
     String argsL = args; argsL.toLowerCase();
     if (argsL == "off" || argsL == "0" || argsL == "no") {
       gdriveSetUrl("");
-      return "Google Drive: desactivado.";
+      return "📊 Google Drive: desactivado.";
     }
-    if (!args.startsWith("http")) return "URL invalida. Debe comenzar con https://";
+    if (!args.startsWith("http")) return "❌ URL invalida. Debe comenzar con https://";
     gdriveSetUrl(args);
-    return "Google Drive: activado.\nURL guardada. Los proximos logs se enviaran al Sheet.";
+    return "📊 Google Drive: activado ✅\nURL guardada. Los proximos logs se enviaran al Sheet.";
   }
 
-  return "Comando no reconocido. Usa: help";
+  return "❓ Comando no reconocido. Usa: help";
 }
 
 // =========================================================
