@@ -34,13 +34,59 @@ Las credenciales (WiFi, token, URL de Google Drive) se guardan en NVS y se reuti
 
 ## Dashboard web
 
-El firmware sirve un dashboard en el puerto **80** con tres pestañas:
+El firmware sirve una SPA (Single Page Application) en el puerto **80**, accesible desde cualquier navegador en la misma red. La comunicación es por **WebSocket** (`/ws`) con actualizaciones cada ~2 segundos. Los controles envían los mismos comandos que Telegram/Serial, por lo que todo cambio se refleja de inmediato en el hardware.
 
-- **Dashboard** — gauges en tiempo real de temperatura, humedad, suelo y calidad del aire; control de LED, ventiladores, riego y bomba; vista de cámara IP (MJPEG); últimos eventos.
-- **Logs** — navegación y descarga de archivos CSV de la SD por mes.
-- **Config** — configuración completa de planta, alertas, suelo, bomba, Telegram y zona horaria.
+En la cabecera se muestra la IP del ESP32, el reloj en tiempo real sincronizado con el RTC, un indicador del estado de la conexión WebSocket (verde = conectado), y un campo para el nombre del bot de Telegram que genera un enlace directo al chat.
 
-La comunicación con el ESP32 es por **WebSocket** (`/ws`). Los controles del dashboard envían los mismos comandos que Telegram/Serial.
+### Pestaña Dashboard
+
+**Gauges de sensores** — cuadrícula de 6 medidores circulares con animación y cambio de color según umbrales:
+
+| Gauge | Rango | Alerta visual |
+|-------|-------|---------------|
+| Temperatura | 0 – 50 °C | Rojo al superar el umbral configurado |
+| Humedad | 0 – 100 % | Rojo si cae bajo el mínimo o supera el máximo |
+| Humedad suelo | 0 – 100 % | Indicativo respecto a umbrales de riego |
+| Calidad de aire MQ | 0 – 4095 raw | Rojo al superar el umbral configurado |
+| Fan RPM | 0 – máx | Sin alerta de color |
+| Suelo RAW (ADC) | 0 – 4095 | Sin alerta de color (útil para calibración) |
+
+Cada gauge tiene un botón de expansión que muestra un **sparkline** con la historia de los últimos 10 minutos.
+
+**Cámara IP** — reproduce un stream MJPEG ingresando la URL de cualquier cámara en la red local (ej. ESP32-CAM).
+
+**Última actividad** — lista de los últimos eventos del sistema con badge de color por tipo (`RIEGO`, `LUZ_ON`, `LUZ_OFF`, `ALERTA_ON`, `ALERTA_OFF`) y botón de refresco.
+
+**Controles:**
+
+| Card | Controles disponibles |
+|------|-----------------------|
+| LED Morado | Botones ON/OFF + slider de intensidad (1–100 %) |
+| Ventiladores | Slider de velocidad manual (0–100 %) + toggle Auto/Manual + gráfico de RPM en tiempo real |
+| Riego | Toggle Auto-riego + campo mL para riego manual + indicador de nivel del tanque |
+
+### Pestaña Logs
+
+Permite navegar y visualizar los archivos CSV de la tarjeta SD directamente desde el navegador:
+
+- **Selector de mes** — lista los directorios disponibles en `/logs/`.
+- **Selector de archivo** — lista los CSV del mes seleccionado.
+- **Vista de tabla** — muestra el CSV con las filas coloreadas por tipo de evento (riego en cyan, luz encendida en verde, alertas en rojo/verde).
+- **Botón Descargar** — descarga el CSV seleccionado al dispositivo.
+
+### Pestaña Configuración
+
+Secciones colapsables, cada una con un botón de guardar independiente. Los cambios se aplican inmediatamente vía WebSocket y se persisten en NVS.
+
+| Sección | Qué se configura |
+|---------|-----------------|
+| **Telegram** | Token del bot y nombre para el enlace directo (el token se muestra oculto) |
+| **Planta** | Etapa de crecimiento, volumen de maceta, mL/L por etapa, horas de luz por etapa, intensidad del LED |
+| **Alertas** | Temperatura máxima, humedad mínima (plántula/vegetativo), humedad máxima (pre-flor en adelante), umbral MQ de calidad de aire |
+| **Suelo y Bomba** | Umbral seco y húmedo para riego automático; calibración ADC del sensor (bloqueada por defecto, desbloquear con botón) |
+| **Bomba** | Calibración de caudal: ejecuta la bomba 5 s y registra el volumen recolectado |
+| **Sistema** | Offset de zona horaria (UTC±h) |
+| **Redes WiFi** | Lista de redes guardadas (máx 5) con opción de agregar, editar y eliminar; el ESP32 las prueba automáticamente en orden si la red principal falla |
 
 ### API HTTP
 
@@ -49,8 +95,10 @@ La comunicación con el ESP32 es por **WebSocket** (`/ws`). Los controles del da
 | `/` | GET | Sirve el dashboard |
 | `/api/config` | GET | Configuración actual como JSON |
 | `/api/logs` | GET | Índice de meses y archivos de log en SD |
-| `/api/logfile?path=...` | GET | Descarga o muestra un CSV de log (`&dl=1` para descarga) |
+| `/api/logfile?path=...` | GET | Muestra un CSV de log (`&dl=1` para descarga directa) |
 | `/api/telegram` | POST | Actualiza token y/o nombre del bot (`{"token":"...","name":"..."}`) |
+| `/api/wifi` | GET | Lista las redes WiFi guardadas |
+| `/api/wifi/add` | POST | Agrega una red WiFi guardada |
 
 ## Logs en SD
 
