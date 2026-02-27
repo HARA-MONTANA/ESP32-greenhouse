@@ -318,9 +318,10 @@ void broadcastSensorData() {
   doc["alert_mq"]    = alertMq;
   doc["alert_water"] = alertWater;
   // Metadata
-  doc["last_irr"]    = (long)getLastIrrigationEpoch();
-  doc["tz_offset"]   = getTimezoneOffsetHours();
-  doc["bot_name"]    = botName;
+  doc["last_irr"]        = (long)getLastIrrigationEpoch();
+  doc["pump_calibrated"] = isPumpCalibrated();
+  doc["tz_offset"]       = getTimezoneOffsetHours();
+  doc["bot_name"]        = botName;
 
   String payload;
   payload.reserve(384);
@@ -625,7 +626,7 @@ void applyLightSchedule() {
   time_t offTs = startTs + getLightHoursForStage(stage) * 3600L;
 
   bool shouldBeOn = nowTs >= startTs && nowTs < offTs;
-  bool ledShouldBeOn = shouldBeOn && ledOn;
+  bool ledShouldBeOn = ledOn;  // LED morado es independiente del relay de CA
 
   static bool prevLightOn = false;
   if (shouldBeOn != prevLightOn) {
