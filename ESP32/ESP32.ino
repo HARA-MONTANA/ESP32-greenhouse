@@ -1439,6 +1439,38 @@ void requestCredentials() {
   wifiPassword = promptOrStoredValue("WiFi Password:", storedWifiPassword, promptTimeoutMs);
   telegramToken = promptOrStoredValue("Token Telegram:", storedTelegramToken, promptTimeoutMs);
 
+  // Google Drive Apps Script URL — completamente opcional, Enter para omitir
+  if (!skipCredentialPrompt) {
+    Serial.println();
+    Serial.println("Google Drive Apps Script URL (opcional):");
+    Serial.println("  Pega la URL del webhook para guardar logs en Drive.");
+    String stored = gdriveGetUrl();
+    if (!stored.isEmpty()) {
+      Serial.print("  [actual: ");
+      Serial.print(stored);
+      Serial.println("]");
+      Serial.println("  Enter para conservar, \"off\" para desactivar.");
+    } else {
+      Serial.println("  Enter para omitir.");
+    }
+    String input = readLineFromSerial("> ", promptTimeoutMs, true);
+    input.trim();
+    if (!input.isEmpty()) {
+      String inputL = input;
+      inputL.toLowerCase();
+      if (inputL == "off" || inputL == "no") {
+        gdriveSetUrl("");
+        Serial.println("Google Drive: desactivado.");
+      } else if (input.startsWith("http")) {
+        gdriveSetUrl(input);
+        Serial.println("Google Drive: URL guardada.");
+      } else {
+        Serial.println("URL ignorada (debe comenzar con http). Usa /gdrive para configurarla luego.");
+      }
+    }
+    // Si input está vacío se conserva el valor existente (o ninguno)
+  }
+
   Serial.println();
   Serial.println("=========== CONFIGURACION INICIAL ===========");
   Serial.print("WiFi SSID: ");
@@ -1447,6 +1479,8 @@ void requestCredentials() {
   Serial.println(wifiPassword);
   Serial.print("Token Telegram: ");
   Serial.println(telegramToken);
+  Serial.print("Google Drive: ");
+  Serial.println(gdriveIsEnabled() ? gdriveGetUrl() : "desactivado");
   Serial.println();
   Serial.println("Credenciales recibidas.");
   Serial.println("==============================================");
@@ -1775,6 +1809,9 @@ void setup() {
   // Cargar credenciales almacenadas
   loadStoredCredentials();
 
+  // Cargar URL de Google Drive antes del prompt (para mostrar valor actual)
+  gdriveInit();
+
   const bool credSkipPressed = isSkipButtonPressed();
   const bool hasStoredCreds = hasStoredCredentials();
   skipCredentialPrompt = credSkipPressed && hasStoredCreds;
@@ -1840,10 +1877,7 @@ void setup() {
 
   // SD card (después de NTP para que los timestamps sean correctos)
   bool sdOk = sdInit();
-
-  // Google Drive: inicializar y registrar hook en sdcard
-  gdriveInit();
-  sdSetLogHook(gdriveWriteLog);
+  sdSetLogHook(gdriveWriteLog);  // registrar hook de Google Drive
 
   logAccion("INICIO", "Sistema iniciado; WiFi " +
             String(wifiOk ? "OK" : "FALLO") +

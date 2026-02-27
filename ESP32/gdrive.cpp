@@ -60,12 +60,13 @@ void gdriveWriteLog(const char* tipo,
            dt.tm_hour, dt.tm_min, dt.tm_sec);
 
   // Construir payload JSON
-  StaticJsonDocument<256> doc;
-  doc["ts"]   = ts;
-  doc["tipo"] = tipo;
+  StaticJsonDocument<320> doc;
+  doc["ts"]         = ts;
+  doc["tipo"]       = tipo;
+  doc["hasNumeric"] = hasNumeric;
   if (hasNumeric) {
-    if (!isnan(tempC))  doc["temp"]  = serialized(String(tempC, 1));
-    if (!isnan(rh))     doc["rh"]    = serialized(String(rh, 1));
+    if (!isnan(tempC))  doc["temp"]  = String(tempC, 1);
+    if (!isnan(rh))     doc["rh"]    = String(rh, 1);
     if (soilPct >= 0)   doc["suelo"] = soilPct;
     if (mqRaw >= 0)     doc["mq"]    = mqRaw;
   }
