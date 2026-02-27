@@ -585,6 +585,28 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
     </div>
   </details>
 
+  <!-- Google Drive / Apps Script -->
+  <details class="csec">
+    <summary style="border-left-color:#34a853">
+      &#128196; Google Drive
+      <span class="csec-meta"><span id="gdrive-tag" class="csec-tag" style="background:rgba(52,168,83,.12);color:#34a853;border-color:#34a85344">Inactivo</span></span>
+    </summary>
+    <div class="cbody">
+      <p class="cnote">Pega la URL del Apps Script desplegado como aplicacion web. Los logs del invernadero se guardaran automaticamente en tu Google Drive.</p>
+      <div class="cfield">
+        <label>URL del Apps Script</label>
+        <input type="url" id="gdrive-url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+      </div>
+      <div id="gdrive-active-note" style="display:none;font-size:.75rem;color:#34a853;margin:4px 0 8px">
+        &#9989; Activo &mdash; los logs se estan enviando a Drive.
+      </div>
+      <div class="cact">
+        <button class="btn btn-d" onclick="saveGdrive('off',this)" style="background:rgba(255,18,79,.12);color:var(--c4);border-color:#ff124f44">&#10060; Desactivar</button>
+        <button class="btn btn-p" onclick="saveGdrive(null,this)">&#128190; Guardar URL</button>
+      </div>
+    </div>
+  </details>
+
   <!-- Redes WiFi guardadas -->
   <details class="csec" id="csec-wifi">
     <summary style="border-left-color:#ffb300">
@@ -912,6 +934,7 @@ function loadConfig(){
       if(hi&&!hi._dirty)hi.value=c.bot_name;
       updateBotLink(c.bot_name);
     }
+    updateGdriveStatus(c.gdrive_enabled, c.gdrive_url);
   }).catch(function(){});
 }
 function sv(id,val){var e=document.getElementById(id);if(e&&val!=null)e.value=val}
@@ -945,6 +968,35 @@ function saveTelegram(){
         alert('Telegram guardado.');
       }
     }).catch(function(){alert('Error al guardar Telegram.')});
+}
+
+// ── Google Drive
+function updateGdriveStatus(enabled, url){
+  var tag=document.getElementById('gdrive-tag');
+  var note=document.getElementById('gdrive-active-note');
+  if(!tag)return;
+  if(enabled){
+    tag.textContent='Activo';
+    tag.style.background='rgba(52,168,83,.18)';tag.style.color='#34a853';tag.style.borderColor='#34a85366';
+    if(note)note.style.display='block';
+    sv('gdrive-url', url||'');
+  } else {
+    tag.textContent='Inactivo';
+    tag.style.background='rgba(100,100,100,.12)';tag.style.color='var(--text2)';tag.style.borderColor='rgba(100,100,100,.2)';
+    if(note)note.style.display='none';
+  }
+}
+function saveGdrive(off, btn){
+  var url = off==='off' ? '' : (document.getElementById('gdrive-url').value||'').trim();
+  if(!off && !url){alert('Ingresa una URL valida.');return;}
+  if(url && !url.startsWith('http')){alert('La URL debe comenzar con https://');return;}
+  fetch('/api/gdrive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url})})
+    .then(function(r){return r.json();}).then(function(res){
+      if(res.ok){
+        updateGdriveStatus(url.length>0, url);
+        if(btn)flash(btn,true);
+      }
+    }).catch(function(){if(btn)flash(btn,false);});
 }
 
 // ── WiFi network management
