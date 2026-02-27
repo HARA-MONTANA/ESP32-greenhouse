@@ -852,6 +852,7 @@ String commandHelp() {
   String h;
   h += "🌿 Uso diario\n";
   h += "estado - Estado actual\n";
+  h += "ip - Direccion IP actual\n";
   h += "regar [mL] - Riego manual\n";
   h += "autoriego [on|off] - Riego automatico\n";
   h += "vent [0-100] - Ventilador manual\n";
@@ -900,6 +901,12 @@ String handleCommand(const String &chatId, const String &raw) {
 
   if (cmd == "estado" || cmd == "status") {
     return formatStatusFull();
+  }
+
+  if (cmd == "ip") {
+    String ip = WiFi.localIP().toString();
+    String ssid = WiFi.SSID();
+    return "📡 IP: " + ip + "\n🌐 Red: " + ssid;
   }
 
   if (cmd == "config" || cmd == "conf" || cmd == "ajustes") {
