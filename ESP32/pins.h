@@ -13,9 +13,9 @@
 
 // --- SD card (SPI remapeado) ---
 #define PIN_SD_CS     5
-// #define PIN_SD_SCK    14
-// #define PIN_SD_MISO   19
-// #define PIN_SD_MOSI   23
+#define PIN_SD_SCK    14
+#define PIN_SD_MISO   19
+#define PIN_SD_MOSI   23
 
 // --- Actuadores ---
 #define PIN_FAN_PWM   16   // MOSFET (fans)

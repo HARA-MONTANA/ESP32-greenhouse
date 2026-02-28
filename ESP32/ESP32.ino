@@ -1008,7 +1008,7 @@ String handleCommand(const String &chatId, const String &raw) {
   // --- Configuración ---
 
   if (cmd == "etapa" || cmd == "stage") {
-    if (args.isEmpty()) return "Uso: etapa [pl|veg|pre|flo|fin]";
+    if (args.isEmpty()) return "⚠️ Uso: etapa [pl|veg|pre|flo|fin]";
     updateStage(stageFromString(args));
     applyLightSchedule();
     configSave();
@@ -1144,11 +1144,22 @@ String handleCommand(const String &chatId, const String &raw) {
     }
     if (args == "led") {
       actuatorTestActive = true;
+      // Subida gradual: 0→max en ~2 s (pasos de 5, 40 ms c/u)
+      for (int d = 0; d <= LED_PWM_MAX; d += 5) {
+        ledcWrite(LED_PWM_CHANNEL, min(d, (int)LED_PWM_MAX));
+        delay(40);
+      }
       ledcWrite(LED_PWM_CHANNEL, LED_PWM_MAX);
-      delay(5000);
+      delay(900);  // Mantener al máximo ~1 s
+      // Bajada gradual: max→0 en ~2 s
+      for (int d = LED_PWM_MAX; d >= 0; d -= 5) {
+        ledcWrite(LED_PWM_CHANNEL, max(d, 0));
+        delay(40);
+      }
+      ledcWrite(LED_PWM_CHANNEL, 0);
       actuatorTestActive = false;
       applyLightSchedule();
-      return "✅ LED: prueba 5s OK";
+      return "✅ LED: prueba OK";
     }
     if (args == "luz") {
       actuatorTestActive = true;
@@ -1162,14 +1173,23 @@ String handleCommand(const String &chatId, const String &raw) {
     if (args == "fan") {
       bool prevAuto = fanAuto;
       int  prevPct  = fanPercent;
-      fanAuto    = false;
-      fanPercent = 100;
-      updateFan(true);
-      delay(5000);
+      fanAuto = false;
+      // Subida gradual: 0→100% en ~2 s (pasos de 5%, 100 ms c/u)
+      for (int p = 0; p <= 100; p += 5) {
+        ledcWrite(FAN_PWM_CHANNEL, map(p, 0, 100, 0, FAN_PWM_MAX));
+        delay(100);
+      }
+      delay(900);  // Mantener al máximo ~1 s
+      // Bajada gradual: 100%→0 en ~2 s
+      for (int p = 100; p >= 0; p -= 5) {
+        ledcWrite(FAN_PWM_CHANNEL, map(p, 0, 100, 0, FAN_PWM_MAX));
+        delay(100);
+      }
+      ledcWrite(FAN_PWM_CHANNEL, 0);
       fanAuto    = prevAuto;
       fanPercent = prevPct;
       updateFan(true);
-      return "✅ Fan: prueba 5s OK";
+      return "✅ Fan: prueba OK";
     }
     return "⚠️ Uso: test_act [bomba|led|luz|fan]";
   }
