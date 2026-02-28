@@ -7,7 +7,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Greenhouse</title>
+<title>Invernadero</title>
 <style>
 :root{
   --bg:#060115;--bg2:#0d0230;--bg3:#120458;
@@ -196,7 +196,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 
 <!-- HEADER -->
 <header>
-  <h1>&#9670; Greenhouse</h1>
+  <h1>&#9670; Invernadero</h1>
   <nav>
     <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button>
     <button class="tab-btn" data-tab="logs" onclick="showTab('logs')">Logs</button>
