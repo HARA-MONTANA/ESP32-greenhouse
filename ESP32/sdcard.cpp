@@ -1,6 +1,7 @@
 #include "sdcard.h"
 #include "pins.h"
 #include <SD.h>
+#include <SPI.h>
 #include <time.h>
 
 bool sdReady = false;
@@ -97,7 +98,11 @@ static void writeLog(const char *tipo,
 // ─── API pública ─────────────────────────────────────────────────────────────
 
 bool sdInit() {
-  if (!SD.begin(PIN_SD_CS)) {
+  // SPI remapeado: SCK=14, MISO=19, MOSI=23, CS=5
+  // El módulo SD usa 5V de alimentación pero niveles lógicos 3.3V
+  static SPIClass spi(VSPI);
+  spi.begin(PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, PIN_SD_CS);
+  if (!SD.begin(PIN_SD_CS, spi, 4000000)) {
     Serial.println("[SD] Tarjeta SD no detectada o fallo al iniciar");
     return false;
   }
