@@ -632,6 +632,19 @@ bool stageUsesLeds(plantStage s) {
   return s == PRE_FLORACION || s == FLORACION || s == FINAL;
 }
 
+// Apaga el LED de forma gradual para evitar reinicios por picos de corriente
+void fadeLedOff() {
+  int current = (int)ledcRead(LED_PWM_CHANNEL);
+  if (current == 0) return;
+  actuatorTestActive = true;
+  for (int d = current; d >= 0; d -= 3) {
+    ledcWrite(LED_PWM_CHANNEL, max(d, 0));
+    delay(20);
+  }
+  ledcWrite(LED_PWM_CHANNEL, 0);
+  actuatorTestActive = false;
+}
+
 void applyLightSchedule() {
   if (actuatorTestActive) return;  // pausa durante prueba de actuador
   struct tm now;
@@ -660,12 +673,16 @@ void applyLightSchedule() {
 
   digitalWrite(PIN_ACLIGHT, shouldBeOn ? LOW : HIGH);
 
+  static bool prevLedShouldBeOn = false;
   if (ledShouldBeOn) {
     int duty = map(getLedIntensity(), 0, 100, 0, LED_PWM_MAX);
     ledcWrite(LED_PWM_CHANNEL, duty);
   } else {
-    ledcWrite(LED_PWM_CHANNEL, 0);
+    if (prevLedShouldBeOn) {
+      fadeLedOff();  // Apagado gradual al detectar transición ON→OFF
+    }
   }
+  prevLedShouldBeOn = ledShouldBeOn;
 }
 
 // =========================================================
