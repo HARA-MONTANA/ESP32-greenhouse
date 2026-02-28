@@ -7,7 +7,7 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Greenhouse</title>
+<title>Invernadero</title>
 <style>
 :root{
   --bg:#060115;--bg2:#0d0230;--bg3:#120458;
@@ -196,7 +196,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
 
 <!-- HEADER -->
 <header>
-  <h1>&#9670; Greenhouse</h1>
+  <h1>&#9670; Invernadero</h1>
   <nav>
     <button class="tab-btn active" data-tab="dashboard" onclick="showTab('dashboard')">Dashboard</button>
     <button class="tab-btn" data-tab="logs" onclick="showTab('logs')">Logs</button>
@@ -292,10 +292,10 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
           <path d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#1a0840" stroke-width="9" stroke-linecap="round"/>
           <path id="arc-fan-rpm" d="M10,67 A55,55 0 0,1 110,67" fill="none" stroke="#00e5ff" stroke-width="9" stroke-linecap="round" stroke-dasharray="172.8" stroke-dashoffset="172.8" style="transition:stroke-dashoffset .6s,stroke .4s"/>
           <text x="60" y="62" text-anchor="middle" fill="#e8d5ff" font-size="19" font-weight="bold" id="txt-fan-rpm" font-family="Courier New">--</text>
-          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">RPM</text>
+          <text x="60" y="70" text-anchor="middle" fill="#9b59b6" font-size="8" font-family="Courier New">%</text>
         </svg>
       </div>
-      <div class="gauge-label" onclick="toggleSpk('fan-rpm',this)"><span>&#127744; Fan RPM</span><span class="spk-arrow">&#9656;</span></div>
+      <div class="gauge-label" onclick="toggleSpk('fan-rpm',this)"><span>&#127744; Fan %</span><span class="spk-arrow">&#9656;</span></div>
       <div class="spk-wrap" id="spk-wrap-fan-rpm" style="display:none"><svg id="spk-fan-rpm" viewBox="0 0 600 280" preserveAspectRatio="none" style="width:100%;height:160px;background:rgba(0,229,255,.06);border-radius:4px;display:block"></svg></div>
     </div>
 
@@ -375,7 +375,7 @@ th{color:var(--text2);position:sticky;top:0;background:var(--bg2)}
       </div>
       <div class="ctrl-row">
         <button class="btn btn-o" id="fan-auto-btn" onclick="toggleFanAuto(this)">Auto: ON</button>
-        <span style="font-size:.72rem;color:var(--cyan);margin-left:6px" id="fan-rpm-lbl">-- RPM</span>
+        <span style="font-size:.72rem;color:var(--cyan);margin-left:6px" id="fan-rpm-lbl">--%</span>
       </div>
       <div style="margin-top:8px">
         <svg id="rpm-chart" viewBox="0 0 600 280" preserveAspectRatio="none"
@@ -740,7 +740,7 @@ var spkColor={
   temp:'#7a04eb',rh:'#00e5ff',soil:'#39ff14',mq:'#fe75fe',
   'soil-raw':'#ff8c00','fan-rpm':'#00e5ff'
 };
-// Fan RPM history — 20-minute rolling window
+// Fan % history — 10-minute rolling window
 var rpmHist=[];
 
 // ── WebSocket
@@ -777,7 +777,7 @@ function onWs(d){
   // Fan RPM
   var spkTs=d.ts?d.ts*1000:Date.now();
   if(d.fan_rpm!==undefined){pushRpm(d.fan_rpm,spkTs)}
-  gauge('fan-rpm',d.fan_rpm,0,3000,1500,2500);
+  gauge('fan-rpm',d.fan_rpm,0,100,50,80);
   // Sparklines
   if(d.temp_c!=null)pushSpk('temp',d.temp_c,spkTs);
   if(d.rh_pct!=null)pushSpk('rh',d.rh_pct,spkTs);
@@ -809,14 +809,16 @@ function gauge(id,val,mn,mx,wL,wH){
   arc.style.stroke=spkColor[id]||'#39ff14';
 }
 
-// ── Clock
+// ── Clock (formato 12 horas)
 setInterval(function(){
   if(!tsBase)return;
   var n=new Date((tsBase+Math.floor((Date.now()-tsAt)/1000))*1000);
-  var hh=('0'+n.getHours()).slice(-2);
+  var hr=n.getHours(),ap=hr>=12?'PM':'AM';
+  hr=hr%12;if(hr===0)hr=12;
+  var hh=('0'+hr).slice(-2);
   var mm=('0'+n.getMinutes()).slice(-2);
   var ss=('0'+n.getSeconds()).slice(-2);
-  document.getElementById('clock').textContent=hh+':'+mm+':'+ss;
+  document.getElementById('clock').textContent=hh+':'+mm+':'+ss+' '+ap;
 },1000);
 
 // ── Live chart scroll — redraw visible sparklines every 5 s so the
@@ -1239,7 +1241,7 @@ function pushRpm(v,ts){
   var cutoff=t-SPK_WIN;
   while(rpmHist.length>0&&rpmHist[0].t<cutoff)rpmHist.shift();
   var lbl=document.getElementById('fan-rpm-lbl');
-  if(lbl)lbl.textContent=v+' RPM';
+  if(lbl)lbl.textContent=v+'%';
   drawRpmChart();
 }
 function drawRpmChart(){
@@ -1252,7 +1254,7 @@ function drawRpmChart(){
   var tMin=now-SPK_WIN;
   var vals=rpmHist.map(function(p){return p.v;});
   var mn=0,mx=Math.max.apply(null,vals);
-  if(mx<300)mx=300;
+  if(mx<10)mx=10;  // minimo 10% para que el grafico sea visible cuando el fan esta casi parado
   function tx(t){return (ML+(t-tMin)/SPK_WIN*PW).toFixed(1);}
   function ty(v){return (MT+PH-((v-mn)/(mx-mn))*PH).toFixed(1);}
   var s='';
@@ -1314,7 +1316,7 @@ function drawSpk(key){
   var mn=Math.min.apply(null,vals);
   var mx=Math.max.apply(null,vals);
   // Rango minimo por sensor para evitar que variaciones pequenas dominen el grafico
-  var minSpan={temp:5,rh:10,soil:10,mq:300,'soil-raw':400,'fan-rpm':200}[key]||5;
+  var minSpan={temp:5,rh:10,soil:10,mq:300,'soil-raw':400,'fan-rpm':10}[key]||5;
   if((mx-mn)<minSpan){var mid=(mn+mx)/2;mn=mid-minSpan/2;mx=mid+minSpan/2;}
   if(key!=='temp'&&mn<0)mn=0;
   var vRange=mx-mn;

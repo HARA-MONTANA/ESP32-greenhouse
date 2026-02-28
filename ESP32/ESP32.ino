@@ -53,9 +53,12 @@ UniversalTelegramBot *telegramBot = nullptr;
 bool telegramEnabled = false;
 String lastTelegramChatId;
 String botName;
-// Inscripcion abierta: si true, el proximo chat desconocido se auto-agrega.
-// No se persiste en NVS: vuelve a false en cada reboot (seguridad por defecto).
+// Modo inscripcion: mientras sea true, cualquier chat desconocido que escriba
+// queda autorizado automaticamente. Se cierra al llegar al limite de 5 IDs,
+// con /acceso off, o al agotarse el temporizador opcional.
+// No se persiste en NVS (vuelve a false tras cada reboot).
 bool enrollmentOpen = false;
+unsigned long enrollmentExpireMs = 0;  // 0 = sin expiración; > 0 = millis() de cierre
 
 // Suscriptores de reportes periodicos (RAM, no persiste en NVS).
 // Cada usuario elige con "reportes on/off" si quiere recibirlos,
@@ -84,6 +87,13 @@ int cachedSoilAdc = 0;
 int cachedMqRaw   = 0;
 unsigned long lastFastSensorMs = 0;
 
+// Filtro de promedio movil para MQ-135 (8 muestras, ~16 s con ciclo 2 s)
+// Reduce el ruido del sensor que puede generar alertas falsas.
+const int MQ_AVG_SIZE = 8;
+int mqSamples[MQ_AVG_SIZE] = {};
+int mqSampleIdx = 0;
+bool mqAvgReady = false;
+
 // Fan PWM
 const int FAN_PWM_CHANNEL = 0;
 const int FAN_PWM_FREQ = 25000;
@@ -92,9 +102,6 @@ const int FAN_PWM_MAX = (1 << FAN_PWM_RES) - 1;
 bool fanAuto = true;
 int fanPercent = 0;
 int fanApplied = -1;
-
-// RPM estimado a partir del duty cycle (100 % ≈ 3000 RPM)
-unsigned long fanRpm = 0;
 
 // LED morado PWM
 const int LED_PWM_CHANNEL = 1;
@@ -224,7 +231,8 @@ bool readAmbient(float &tempC, float &rh) {
   return true;
 }
 
-// Lectura de ADC con caché de 500 ms: suelo y MQ leídos una sola vez por ciclo
+/// Lectura de ADC con caché de 500 ms: suelo y MQ leídos una sola vez por ciclo.
+// El MQ-135 pasa por un promedio movil de MQ_AVG_SIZE muestras para reducir ruido.
 void readFastSensors(int &soilAdc, int &mqRaw) {
   unsigned long now = millis();
   if (now - lastFastSensorMs < 500) {
@@ -233,7 +241,20 @@ void readFastSensors(int &soilAdc, int &mqRaw) {
     return;
   }
   cachedSoilAdc = soilAdc = readSoilMoisture();
-  cachedMqRaw   = mqRaw   = analogRead(PIN_MQ135);
+
+  int rawMq = analogRead(PIN_MQ135);
+  // Primera muestra: inicializar todo el array con la lectura actual para
+  // evitar el periodo de arranque con valores en cero.
+  if (!mqAvgReady && mqSampleIdx == 0) {
+    for (int i = 0; i < MQ_AVG_SIZE; i++) mqSamples[i] = rawMq;
+    mqAvgReady = true;
+  }
+  mqSamples[mqSampleIdx] = rawMq;
+  mqSampleIdx = (mqSampleIdx + 1) % MQ_AVG_SIZE;
+  long sum = 0;
+  for (int i = 0; i < MQ_AVG_SIZE; i++) sum += mqSamples[i];
+  cachedMqRaw = mqRaw = (int)(sum / MQ_AVG_SIZE);
+
   lastFastSensorMs = now;
 }
 
@@ -301,7 +322,7 @@ void broadcastSensorData() {
   doc["soil_pct"]    = soilPct;
   doc["soil_adc"]    = soilAdc;
   doc["mq_raw"]      = mqRaw;
-  doc["fan_rpm"]     = (long)fanRpm;
+  doc["fan_rpm"]     = fanApplied;  // envia porcentaje (0-100); el campo conserva el nombre por compatibilidad con dashboard
   doc["temp_valid"]  = valid;
   doc["ts"]          = (long)ts;
   // System state
@@ -561,7 +582,7 @@ void initFan() {
 int computeAutoFan() {
   float tempC, rh;
   bool ok = readAmbient(tempC, rh);
-  int mqReading = analogRead(PIN_MQ135);
+  int mqReading = cachedMqRaw;  // usa el promedio movil filtrado
 
   int tempPct = 0;
   if (ok && getTempAlertThreshold() > 0) {
@@ -592,7 +613,6 @@ void updateFan(bool force = false) {
     fanApplied = target;
     fanPercent = target;
   }
-  fanRpm = (unsigned long)fanApplied * 30;  // estimado: 100% ≈ 3000 RPM
 }
 
 // =========================================================
@@ -771,8 +791,8 @@ void evaluateAlerts() {
 String formatStatusCompact() {
   float temp, rh;
   bool ok = readAmbient(temp, rh);
-  int mq = analogRead(PIN_MQ135);
-  int soilAdc = readSoilMoisture();
+  int soilAdc, mq;
+  readFastSensors(soilAdc, mq);
   int soilPct = soilPercentFromAdc(soilAdc);
   bool water = isTankWaterAvailable();
 
@@ -798,8 +818,8 @@ String formatStatusCompact() {
 String formatStatusFull() {
   float temp, rh;
   bool ok = readAmbient(temp, rh);
-  int mq = analogRead(PIN_MQ135);
-  int soilAdc = readSoilMoisture();
+  int soilAdc, mq;
+  readFastSensors(soilAdc, mq);
   int soilPct = soilPercentFromAdc(soilAdc);
   bool water = isTankWaterAvailable();
   float stageMl = getMlPerLiterForStage(getCurrentStage()) * getPotVolumeL();
@@ -977,8 +997,10 @@ String handleCommand(const String &chatId, const String &raw) {
     }
     if (!enabled) {
       reportSubscribers.erase(chatId);
+      saveReportSubscribers();
       return "📊 Tus reportes: OFF";
     }
+    saveReportSubscribers();
     return String("📊 Tus reportes: ON ✅ | ") + String(r.intervalMs / 60000) + " min" +
            " | Modo: " + (r.compact ? "compacto" : "completo");
   }
@@ -1056,7 +1078,10 @@ String handleCommand(const String &chatId, const String &raw) {
     if (sp2 == -1) return "⚠️ Uso: calsuelo [SECO] [HUMEDO]";
     int dry = args.substring(0, sp2).toInt();
     int wet = args.substring(sp2 + 1).toInt();
-    setSoilCalibration(dry, wet);
+    if (!setSoilCalibration(dry, wet)) {
+      return "❌ Calibracion invalida: seco debe superar a humedo en al menos 100 unidades ADC (seco=" +
+             String(dry) + " humedo=" + String(wet) + ")";
+    }
     return "🌱 Calibracion suelo: seco=" + String(getSoilDryAdc()) + " humedo=" + String(getSoilWetAdc());
   }
 
@@ -1189,17 +1214,38 @@ String handleCommand(const String &chatId, const String &raw) {
   }
 
   if (cmd == "acceso") {
-    if (authorizedChatIds.size() >= 5) return "❌ Maximo de IDs alcanzado (5). Elimina uno con delid antes de abrir acceso.";
-    if (args == "on") {
-      enrollmentOpen = true;
-    } else if (args == "off") {
-      enrollmentOpen = false;
-    } else {
-      enrollmentOpen = !enrollmentOpen;
+    // Caso numérico: /acceso [minutos] — abre el modo con temporizador (máx 60 min)
+    int minutes = args.toInt();
+    if (minutes > 0) {
+      if ((int)authorizedChatIds.size() >= 5)
+        return "❌ Maximo de IDs alcanzado (5). Elimina uno con /delid antes de abrir acceso.";
+      minutes = min(minutes, 60);
+      enrollmentOpen     = true;
+      enrollmentExpireMs = millis() + (unsigned long)minutes * 60000UL;
+      int slots = 5 - (int)authorizedChatIds.size();
+      return "🔓 Modo inscripcion ACTIVO por " + String(minutes) + " min. (" +
+             String(slots) + " lugar(es) disponibles). Cierra solo o con /acceso off.";
     }
-    if (enrollmentOpen)
-      return "🔓 Acceso ABIERTO. El proximo chat desconocido que escriba sera agregado y el acceso se cerrara automaticamente.";
-    return "🔒 Acceso CERRADO. Solo IDs autorizados pueden interactuar.";
+    if (args == "on") {
+      if ((int)authorizedChatIds.size() >= 5) return "❌ Maximo de IDs alcanzado (5). Elimina uno con /delid antes de abrir acceso.";
+      enrollmentOpen     = true;
+      enrollmentExpireMs = 0;  // sin expiracion
+    } else if (args == "off") {
+      enrollmentOpen     = false;
+      enrollmentExpireMs = 0;
+    } else {
+      // toggle
+      if (!enrollmentOpen && (int)authorizedChatIds.size() >= 5)
+        return "❌ Maximo de IDs alcanzado (5). Elimina uno con /delid antes de abrir acceso.";
+      enrollmentOpen = !enrollmentOpen;
+      if (!enrollmentOpen) enrollmentExpireMs = 0;
+    }
+    if (enrollmentOpen) {
+      int slots = 5 - (int)authorizedChatIds.size();
+      return "🔓 Modo inscripcion ACTIVO (sin limite de tiempo). (" +
+             String(slots) + " lugar(es) disponibles). Cierra con /acceso off.";
+    }
+    return "🔒 Modo inscripcion CERRADO. Solo IDs autorizados pueden interactuar.";
   }
 
   if (cmd == "reset") {
@@ -1383,11 +1429,17 @@ bool ensureChatAuthorized(const String &chatId) {
     }
     return true;
   }
+  // Modo inscripcion activo: autorizar a cualquier usuario hasta llenar el limite.
+  // El modo permanece abierto hasta que se cierre explicitamente con /acceso off.
   if (enrollmentOpen && authorizedChatIds.size() < 5) {
     authorizedChatIds.push_back(chatId);
     persistChatIds();
-    enrollmentOpen = false;  // cierra automaticamente tras agregar uno
-    broadcastMessage("[Acceso] Chat agregado: " + chatId + "\nAcceso cerrado automaticamente.");
+    int remaining = 5 - (int)authorizedChatIds.size();
+    String nota = remaining > 0
+      ? " (" + String(remaining) + " lugar(es) disponibles)"
+      : " Limite alcanzado; acceso cerrado automaticamente.";
+    if (remaining == 0) { enrollmentOpen = false; enrollmentExpireMs = 0; }
+    broadcastMessage("[Acceso] Nuevo chat autorizado: " + chatId + nota);
     return true;
   }
   return false;
@@ -1555,7 +1607,16 @@ void requestCredentials() {
   Serial.print("WiFi Password: ");
   Serial.println(wifiPassword);
   Serial.print("Token Telegram: ");
-  Serial.println(telegramToken);
+  {
+    int tLen = telegramToken.length();
+    if (tLen > 8) {
+      Serial.println(telegramToken.substring(0, 4) + "..." + telegramToken.substring(tLen - 4));
+    } else if (tLen > 0) {
+      Serial.println("(configurado)");
+    } else {
+      Serial.println("(no configurado)");
+    }
+  }
   Serial.print("Google Drive: ");
   Serial.println(gdriveIsEnabled() ? gdriveGetUrl() : "desactivado");
   Serial.println();
@@ -1837,6 +1898,55 @@ void pollTelegram() {
   }
 }
 
+// =========================================================
+//  PERSISTENCIA DE SUSCRIPCIONES DE REPORTES
+// =========================================================
+// Guarda hasta 5 suscriptores en NVS (namespace "reporters").
+// Formato: cnt + id0..4 (String) + ms0..4 (uint32) + cp0..4 (bool)
+void saveReportSubscribers() {
+  Preferences rp;
+  rp.begin("reporters", false);
+  rp.clear();
+  int i = 0;
+  for (auto &kv : reportSubscribers) {
+    String b = String(i);
+    rp.putString(("id" + b).c_str(), kv.first);
+    rp.putUInt(("ms" + b).c_str(), (uint32_t)kv.second.intervalMs);
+    rp.putBool(("cp" + b).c_str(), kv.second.compact);
+    if (++i >= 5) break;
+  }
+  rp.putInt("cnt", i);
+  rp.end();
+}
+
+void loadReportSubscribers() {
+  Preferences rp;
+  rp.begin("reporters", true);
+  int cnt = rp.getInt("cnt", 0);
+  for (int i = 0; i < cnt && i < 5; i++) {
+    String b = String(i);
+    String id = rp.getString(("id" + b).c_str(), "");
+    if (id.isEmpty()) continue;
+    ReportSub r;
+    r.intervalMs = (unsigned long)rp.getUInt(("ms" + b).c_str(), 30 * 60000UL);
+    r.compact    = rp.getBool(("cp" + b).c_str(), true);
+    r.lastMs     = 0;  // reiniciar timer tras reboot para no enviar de inmediato
+    reportSubscribers[id] = r;
+  }
+  rp.end();
+}
+
+// Cierra el modo inscripcion cuando vence el temporizador.
+// Llamar desde loop(). Opera solo si hay un plazo activo.
+void tickEnrollment() {
+  if (!enrollmentOpen || enrollmentExpireMs == 0) return;
+  if (millis() >= enrollmentExpireMs) {
+    enrollmentOpen    = false;
+    enrollmentExpireMs = 0;
+    broadcastMessage("🔒 Modo inscripcion cerrado automaticamente (tiempo agotado).");
+  }
+}
+
 void sendPeriodicReport() {
   if (!telegramEnabled || !telegramBot || reportSubscribers.empty()) return;
   unsigned long now = millis();
@@ -1984,6 +2094,7 @@ void setup() {
   telegramClient.setCACert(TELEGRAM_CERTIFICATE_ROOT);
   telegramClient.setTimeout(15000);
   initializeTelegramBot();
+  loadReportSubscribers();  // restaurar suscripciones de reportes tras reboot
 
   // Web dashboard (requiere WiFi conectado)
   if (WiFi.status() == WL_CONNECTED) {
@@ -1999,6 +2110,8 @@ void setup() {
 // =========================================================
 
 void loop() {
+  tickIrrigation();   // avanzar maquina de estados de riego (no bloqueante)
+  tickEnrollment();   // cerrar modo inscripcion si venció el temporizador
   handleSerialInput();
   pollTelegram();
   wsEndpoint.cleanupClients();
@@ -2018,6 +2131,7 @@ void loop() {
 
   if (now - lastSoilMs >= 2000) {
     lastSoilMs = now;
+    updateTankFloat();  // debounce del flotador antes de chequear riego y alertas
     checkSoilAndIrrigate();
     evaluateAlerts();
     broadcastSensorData();
@@ -2031,8 +2145,9 @@ void loop() {
       nextSdLogEpoch = ((epoch_now / SD_INTERVAL) + 1) * SD_INTERVAL;
       float sdTemp, sdRh;
       bool sdValid = readAmbient(sdTemp, sdRh);
-      int sdSoil   = soilPercentFromAdc(readSoilMoisture());
-      int sdMq     = analogRead(PIN_MQ135);
+      int sdSoil, sdMq;
+      readFastSensors(sdSoil, sdMq);
+      sdSoil = soilPercentFromAdc(sdSoil);
       logSensors(sdTemp, sdRh, sdSoil, sdMq, sdValid);
     }
   }
