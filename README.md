@@ -246,11 +246,24 @@ Pasos: envía `/calibrar`, mide el agua que salió, luego envía `/caudal [mL]`.
 
 | Comando | Descripción |
 |---------|-------------|
-| `/addid [ID]` | Autorizar un chat de Telegram (máx 5) |
+| `/acceso [on\|off]` | Activa o desactiva el modo de inscripción (sin argumento hace toggle) |
+| `/addid [ID]` | Autorizar un chat de Telegram manualmente (máx 5) |
 | `/delid [ID]` | Eliminar un chat autorizado |
 | `/ids` | Ver chats autorizados |
 | `/reset` | Restablecer configuración de planta a valores por defecto |
 | `/gdrive [url\|off]` | Configurar o desactivar el webhook de Google Drive |
+
+### Autorización de usuarios
+
+El bot maneja el acceso con tres mecanismos combinados:
+
+1. **Primer usuario automático** — si el bot no tiene ningún chat autorizado, el primero que le escriba queda registrado como administrador sin importar el estado del modo inscripción. Esto permite el arranque inicial sin configuración previa.
+
+2. **Modo inscripción** (`/acceso on`) — mientras está activo, **cualquier** usuario que escriba al bot queda autorizado automáticamente. El modo **permanece abierto** hasta que se cierre explícitamente con `/acceso off`. Se muestra cuántos lugares quedan disponibles (máximo 5 en total). Si se alcanza el límite, el modo se cierra solo.
+
+3. **Autorización manual** (`/addid [ID]`) — agrega un chat ID específico de Telegram en cualquier momento, sin necesidad de activar el modo inscripción.
+
+> **Seguridad:** el modo inscripción no se persiste en NVS. Si el ESP32 se reinicia, el modo queda cerrado y solo los IDs guardados previamente con `/addid` mantienen su acceso.
 
 ## Etapas de crecimiento
 

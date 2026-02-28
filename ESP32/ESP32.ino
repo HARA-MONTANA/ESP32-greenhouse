@@ -53,8 +53,9 @@ UniversalTelegramBot *telegramBot = nullptr;
 bool telegramEnabled = false;
 String lastTelegramChatId;
 String botName;
-// Inscripcion abierta: si true, el proximo chat desconocido se auto-agrega.
-// No se persiste en NVS: vuelve a false en cada reboot (seguridad por defecto).
+// Modo inscripcion: mientras sea true, cualquier chat desconocido que escriba
+// queda autorizado automaticamente. Se cierra al llegar al limite de 5 IDs o
+// con /acceso off. No se persiste en NVS (vuelve a false tras cada reboot).
 bool enrollmentOpen = false;
 
 // Suscriptores de reportes periodicos (RAM, no persiste en NVS).
@@ -1211,17 +1212,23 @@ String handleCommand(const String &chatId, const String &raw) {
   }
 
   if (cmd == "acceso") {
-    if (authorizedChatIds.size() >= 5) return "❌ Maximo de IDs alcanzado (5). Elimina uno con delid antes de abrir acceso.";
     if (args == "on") {
+      if ((int)authorizedChatIds.size() >= 5) return "❌ Maximo de IDs alcanzado (5). Elimina uno con /delid antes de abrir acceso.";
       enrollmentOpen = true;
     } else if (args == "off") {
       enrollmentOpen = false;
     } else {
+      // toggle
+      if (!enrollmentOpen && (int)authorizedChatIds.size() >= 5)
+        return "❌ Maximo de IDs alcanzado (5). Elimina uno con /delid antes de abrir acceso.";
       enrollmentOpen = !enrollmentOpen;
     }
-    if (enrollmentOpen)
-      return "🔓 Acceso ABIERTO. El proximo chat desconocido que escriba sera agregado y el acceso se cerrara automaticamente.";
-    return "🔒 Acceso CERRADO. Solo IDs autorizados pueden interactuar.";
+    if (enrollmentOpen) {
+      int slots = 5 - (int)authorizedChatIds.size();
+      return "🔓 Modo inscripcion ACTIVO. Cualquier usuario que escriba sera autorizado automaticamente (" +
+             String(slots) + " lugar(es) disponibles). Cierra con /acceso off.";
+    }
+    return "🔒 Modo inscripcion CERRADO. Solo IDs autorizados pueden interactuar.";
   }
 
   if (cmd == "reset") {
@@ -1405,11 +1412,17 @@ bool ensureChatAuthorized(const String &chatId) {
     }
     return true;
   }
+  // Modo inscripcion activo: autorizar a cualquier usuario hasta llenar el limite.
+  // El modo permanece abierto hasta que se cierre explicitamente con /acceso off.
   if (enrollmentOpen && authorizedChatIds.size() < 5) {
     authorizedChatIds.push_back(chatId);
     persistChatIds();
-    enrollmentOpen = false;  // cierra automaticamente tras agregar uno
-    broadcastMessage("[Acceso] Chat agregado: " + chatId + "\nAcceso cerrado automaticamente.");
+    int remaining = 5 - (int)authorizedChatIds.size();
+    String nota = remaining > 0
+      ? " (" + String(remaining) + " lugar(es) disponibles)"
+      : " Limite alcanzado; acceso cerrado automaticamente.";
+    if (remaining == 0) enrollmentOpen = false;
+    broadcastMessage("[Acceso] Nuevo chat autorizado: " + chatId + nota);
     return true;
   }
   return false;
