@@ -36,7 +36,7 @@ Las credenciales (WiFi, token, URL de Google Drive) se guardan en NVS y se reuti
 
 El firmware sirve una SPA (Single Page Application) en el puerto **80**, accesible desde cualquier navegador en la misma red. La comunicación es por **WebSocket** (`/ws`) con actualizaciones cada ~2 segundos. Los controles envían los mismos comandos que Telegram/Serial, por lo que todo cambio se refleja de inmediato en el hardware.
 
-En la cabecera se muestra la IP del ESP32, el reloj en tiempo real sincronizado con el RTC, un indicador del estado de la conexión WebSocket (verde = conectado), y un campo para el nombre del bot de Telegram que genera un enlace directo al chat.
+En la cabecera se muestra la IP del ESP32, el reloj en tiempo real sincronizado con el RTC (formato 12 horas, AM/PM), un indicador del estado de la conexión WebSocket (verde = conectado), y un campo para el nombre del bot de Telegram que genera un enlace directo al chat.
 
 ### Pestaña Dashboard
 
@@ -48,7 +48,7 @@ En la cabecera se muestra la IP del ESP32, el reloj en tiempo real sincronizado 
 | Humedad | 0 – 100 % | Rojo si cae bajo el mínimo o supera el máximo |
 | Humedad suelo | 0 – 100 % | Indicativo respecto a umbrales de riego |
 | Calidad de aire MQ | 0 – 4095 raw | Rojo al superar el umbral configurado |
-| Fan RPM | 0 – máx | Sin alerta de color |
+| Fan % | 0 – 100 % | Sin alerta de color |
 | Suelo RAW (ADC) | 0 – 4095 | Sin alerta de color (útil para calibración) |
 
 Cada gauge tiene un botón de expansión que muestra un **sparkline** con la historia de los últimos 10 minutos.
@@ -62,7 +62,7 @@ Cada gauge tiene un botón de expansión que muestra un **sparkline** con la his
 | Card | Controles disponibles |
 |------|-----------------------|
 | LED Morado | Botones ON/OFF + slider de intensidad (1–100 %) |
-| Ventiladores | Slider de velocidad manual (0–100 %) + toggle Auto/Manual + gráfico de RPM en tiempo real |
+| Ventiladores | Slider de velocidad manual (0–100 %) + toggle Auto/Manual + gráfico de porcentaje en tiempo real |
 | Riego | Toggle Auto-riego + campo mL para riego manual + indicador de nivel del tanque |
 
 ### Pestaña Logs
@@ -123,7 +123,7 @@ Mi unidad/
         └── 2026-03-01.csv
 ```
 
-El mecanismo usa un **Google s Script** desplegado como aplicación web. El ESP32 envía un POST HTTPS con los datos del log; el script escribe la fila en el archivo CSV correspondiente dentro de Google Drive usando la API de Drive. No se requiere OAuth2 en el ESP32.
+El mecanismo usa un **Google Apps Script** desplegado como aplicación web. El ESP32 envía un POST HTTPS con los datos del log; el script escribe la fila en el archivo CSV correspondiente dentro de Google Drive usando la API de Drive. No se requiere OAuth2 en el ESP32.
 
 ### Configuración inicial (una sola vez)
 
@@ -202,7 +202,7 @@ Los comandos funcionan igual en **Telegram** (con `/` delante), **Serial** y **W
 | `/autoriego [on\|off]` | Activar/desactivar riego automático |
 | `/vent [0-100]` | Ventilador en modo manual al % indicado |
 | `/ventauto [on\|off]` | Ventilador en modo automático |
-| `/reportes [on\|off] [min]` | Reportes periódicos por Telegram (intervalo en minutos) |
+| `/reportes [on\|off] [min] [compacto\|completo]` | Reportes periódicos por Telegram (intervalo en minutos, formato). La suscripción persiste en NVS tras reinicios. |
 
 ### Configuración de la planta
 
@@ -214,7 +214,6 @@ Los comandos funcionan igual en **Telegram** (con `/` delante), **Serial** y **W
 | `/ml [etapa] [valor]` | mL por litro de maceta para una etapa |
 | `/luz [etapa] [horas]` | Horas de luz para plántula o vegetativo (12-20 h) |
 | `/led [on\|off\|0-100]` | LED morado: on/off manual o brillo (respeta el horario) |
-| `/pausariego [dias]` | Días mínimos entre riegos automáticos (1-5) |
 | `/timezone [offset]` | Zona horaria como offset UTC en horas (ej. `-3`) |
 
 ### Sensor de suelo
@@ -223,7 +222,7 @@ Los comandos funcionan igual en **Telegram** (con `/` delante), **Serial** y **W
 |---------|-------------|
 | `/suelomin [%]` | Umbral mínimo de humedad para regar (0-50%) |
 | `/suelomax [%]` | Umbral máximo de humedad del suelo (50-100%) |
-| `/calsuelo [SECO] [HUMEDO]` | Calibrar sensor con valores ADC seco y húmedo |
+| `/calsuelo [SECO] [HUMEDO]` | Calibrar sensor con valores ADC seco y húmedo. El valor SECO debe superar al HUMEDO en al menos 100 unidades ADC. |
 
 ### Alertas
 
@@ -257,8 +256,8 @@ Pasos: envía `/calibrar`, mide el agua que salió, luego envía `/caudal [mL]`.
 
 | Código | Etapa | Luz (h) | mL/L (por defecto) | LED morado |
 |--------|-------|---------|------|------------|
-| pl | Plántula | 18 (configurable) | 50 | Solo si `/led on` |
-| veg | Vegetativo | 18 (configurable) | 100 | Solo si `/led on` |
+| pl | Plántula | 12 (configurable 12-20) | 50 | Solo si `/led on` |
+| veg | Vegetativo | 12 (configurable 12-20) | 100 | Solo si `/led on` |
 | pre | Pre-floración | 12 (fija) | 150 | Automático |
 | flo | Floración | 12 (fija) | 200 | Automático |
 | fin | Final | 12 (fija) | 120 | Automático |
@@ -267,6 +266,14 @@ Las horas de luz solo se pueden modificar en plántula y vegetativo. El LED mora
 
 Las luces se encienden a las **06:00** y se apagan según las horas configuradas para la etapa activa.
 
+## Riego
+
+El ciclo de riego es **no bloqueante**: al iniciarse (automático o manual), la bomba arranca y el sistema continúa atendiendo Telegram, el dashboard web y el ventilador sin interrupción. Tras completar el tiempo de bombeo hay un asentamiento de 5 segundos, luego se lee la humedad final y se registra el evento en SD/Drive.
+
+El flotador del tanque tiene **debounce por software**: requiere 3 lecturas consecutivas "sin agua" (~6 s) antes de reportar el tanque vacío, evitando falsas alertas por vibración mecánica.
+
+El riego automático tiene un cooldown de **15 minutos** entre ciclos y un máximo de **4 riegos por día**. El riego manual no está sujeto a estos límites, pero sí al cooldown para el próximo automático.
+
 ## Ventilación automática
 
-En modo automático el ventilador sube proporcionalmente cuando la temperatura supera 24 °C (llega a 100% al alcanzar el umbral de alerta) o cuando el sensor MQ supera el umbral configurado. Se puede forzar un porcentaje fijo con `/vent [0-100]` y volver al modo automático con `/ventauto on`.
+En modo automático el ventilador sube proporcionalmente cuando la temperatura supera 24 °C (llega a 100% al alcanzar el umbral de alerta) o cuando el sensor MQ supera el umbral configurado. La lectura del MQ-135 pasa por un **promedio móvil de 8 muestras** (~16 s de ventana) para reducir el ruido del sensor y evitar activaciones falsas. Se puede forzar un porcentaje fijo con `/vent [0-100]` y volver al modo automático con `/ventauto on`.
