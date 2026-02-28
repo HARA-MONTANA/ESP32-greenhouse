@@ -246,7 +246,7 @@ Pasos: envía `/calibrar`, mide el agua que salió, luego envía `/caudal [mL]`.
 
 | Comando | Descripción |
 |---------|-------------|
-| `/acceso [on\|off]` | Activa o desactiva el modo de inscripción (sin argumento hace toggle) |
+| `/acceso [on\|off\|N]` | Activa/desactiva el modo de inscripción. `N` = minutos de duración (máx 60). Sin argumento hace toggle. |
 | `/addid [ID]` | Autorizar un chat de Telegram manualmente (máx 5) |
 | `/delid [ID]` | Eliminar un chat autorizado |
 | `/ids` | Ver chats autorizados |
@@ -259,7 +259,12 @@ El bot maneja el acceso con tres mecanismos combinados:
 
 1. **Primer usuario automático** — si el bot no tiene ningún chat autorizado, el primero que le escriba queda registrado como administrador sin importar el estado del modo inscripción. Esto permite el arranque inicial sin configuración previa.
 
-2. **Modo inscripción** (`/acceso on`) — mientras está activo, **cualquier** usuario que escriba al bot queda autorizado automáticamente. El modo **permanece abierto** hasta que se cierre explícitamente con `/acceso off`. Se muestra cuántos lugares quedan disponibles (máximo 5 en total). Si se alcanza el límite, el modo se cierra solo.
+2. **Modo inscripción** — mientras está activo, **cualquier** usuario que escriba al bot queda autorizado automáticamente. Se muestra cuántos lugares quedan disponibles (máximo 5 en total). Tiene tres variantes:
+   - `/acceso on` — abre el modo sin límite de tiempo; cierra con `/acceso off`.
+   - `/acceso N` — abre el modo por **N minutos** (máximo 60). Al vencer el plazo se cierra solo y notifica a todos los usuarios autorizados.
+   - Sin argumento — hace toggle del estado actual.
+
+   En todos los casos el modo se cierra automáticamente si se alcanza el límite de 5 IDs.
 
 3. **Autorización manual** (`/addid [ID]`) — agrega un chat ID específico de Telegram en cualquier momento, sin necesidad de activar el modo inscripción.
 

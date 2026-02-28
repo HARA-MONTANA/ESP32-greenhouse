@@ -54,9 +54,11 @@ bool telegramEnabled = false;
 String lastTelegramChatId;
 String botName;
 // Modo inscripcion: mientras sea true, cualquier chat desconocido que escriba
-// queda autorizado automaticamente. Se cierra al llegar al limite de 5 IDs o
-// con /acceso off. No se persiste en NVS (vuelve a false tras cada reboot).
+// queda autorizado automaticamente. Se cierra al llegar al limite de 5 IDs,
+// con /acceso off, o al agotarse el temporizador opcional.
+// No se persiste en NVS (vuelve a false tras cada reboot).
 bool enrollmentOpen = false;
+unsigned long enrollmentExpireMs = 0;  // 0 = sin expiración; > 0 = millis() de cierre
 
 // Suscriptores de reportes periodicos (RAM, no persiste en NVS).
 // Cada usuario elige con "reportes on/off" si quiere recibirlos,
@@ -1212,20 +1214,35 @@ String handleCommand(const String &chatId, const String &raw) {
   }
 
   if (cmd == "acceso") {
+    // Caso numérico: /acceso [minutos] — abre el modo con temporizador (máx 60 min)
+    int minutes = args.toInt();
+    if (minutes > 0) {
+      if ((int)authorizedChatIds.size() >= 5)
+        return "❌ Maximo de IDs alcanzado (5). Elimina uno con /delid antes de abrir acceso.";
+      minutes = min(minutes, 60);
+      enrollmentOpen     = true;
+      enrollmentExpireMs = millis() + (unsigned long)minutes * 60000UL;
+      int slots = 5 - (int)authorizedChatIds.size();
+      return "🔓 Modo inscripcion ACTIVO por " + String(minutes) + " min. (" +
+             String(slots) + " lugar(es) disponibles). Cierra solo o con /acceso off.";
+    }
     if (args == "on") {
       if ((int)authorizedChatIds.size() >= 5) return "❌ Maximo de IDs alcanzado (5). Elimina uno con /delid antes de abrir acceso.";
-      enrollmentOpen = true;
+      enrollmentOpen     = true;
+      enrollmentExpireMs = 0;  // sin expiracion
     } else if (args == "off") {
-      enrollmentOpen = false;
+      enrollmentOpen     = false;
+      enrollmentExpireMs = 0;
     } else {
       // toggle
       if (!enrollmentOpen && (int)authorizedChatIds.size() >= 5)
         return "❌ Maximo de IDs alcanzado (5). Elimina uno con /delid antes de abrir acceso.";
       enrollmentOpen = !enrollmentOpen;
+      if (!enrollmentOpen) enrollmentExpireMs = 0;
     }
     if (enrollmentOpen) {
       int slots = 5 - (int)authorizedChatIds.size();
-      return "🔓 Modo inscripcion ACTIVO. Cualquier usuario que escriba sera autorizado automaticamente (" +
+      return "🔓 Modo inscripcion ACTIVO (sin limite de tiempo). (" +
              String(slots) + " lugar(es) disponibles). Cierra con /acceso off.";
     }
     return "🔒 Modo inscripcion CERRADO. Solo IDs autorizados pueden interactuar.";
@@ -1421,7 +1438,7 @@ bool ensureChatAuthorized(const String &chatId) {
     String nota = remaining > 0
       ? " (" + String(remaining) + " lugar(es) disponibles)"
       : " Limite alcanzado; acceso cerrado automaticamente.";
-    if (remaining == 0) enrollmentOpen = false;
+    if (remaining == 0) { enrollmentOpen = false; enrollmentExpireMs = 0; }
     broadcastMessage("[Acceso] Nuevo chat autorizado: " + chatId + nota);
     return true;
   }
@@ -1919,6 +1936,17 @@ void loadReportSubscribers() {
   rp.end();
 }
 
+// Cierra el modo inscripcion cuando vence el temporizador.
+// Llamar desde loop(). Opera solo si hay un plazo activo.
+void tickEnrollment() {
+  if (!enrollmentOpen || enrollmentExpireMs == 0) return;
+  if (millis() >= enrollmentExpireMs) {
+    enrollmentOpen    = false;
+    enrollmentExpireMs = 0;
+    broadcastMessage("🔒 Modo inscripcion cerrado automaticamente (tiempo agotado).");
+  }
+}
+
 void sendPeriodicReport() {
   if (!telegramEnabled || !telegramBot || reportSubscribers.empty()) return;
   unsigned long now = millis();
@@ -2083,6 +2111,7 @@ void setup() {
 
 void loop() {
   tickIrrigation();   // avanzar maquina de estados de riego (no bloqueante)
+  tickEnrollment();   // cerrar modo inscripcion si venció el temporizador
   handleSerialInput();
   pollTelegram();
   wsEndpoint.cleanupClients();
