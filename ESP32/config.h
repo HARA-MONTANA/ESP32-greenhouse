@@ -56,7 +56,7 @@ void setTempAlertThreshold(int val);
 void setRhLowAlertThreshold(int val);
 void setRhHighAlertThreshold(int val);
 void setMqAlertThreshold(int val);
-void setSoilCalibration(int dryAdc, int wetAdc);
+bool setSoilCalibration(int dryAdc, int wetAdc);  // false si margen < 100 ADC
 void setAutoReadings(bool enabled, unsigned long intervalMs);
 void setTimezoneOffsetHours(int offset);
 

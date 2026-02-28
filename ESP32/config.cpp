@@ -323,15 +323,18 @@ void setMqAlertThreshold(int val) {
   prefs.putInt("mqTh", mqAlertThreshold);
 }
 
-void setSoilCalibration(int dryAdc, int wetAdc) {
-  soilDryAdc = constrain(dryAdc, 0, 4095);
-  soilWetAdc = constrain(wetAdc, 0, 4095);
-  if (soilDryAdc <= soilWetAdc) {
-    soilDryAdc = min(soilWetAdc + 1, 4095);
-  }
+// Requiere al menos 100 unidades ADC de margen entre seco y humedo para
+// garantizar un mapeo util. Retorna false y no guarda si el margen es insuficiente.
+bool setSoilCalibration(int dryAdc, int wetAdc) {
+  int dry = constrain(dryAdc, 0, 4095);
+  int wet = constrain(wetAdc, 0, 4095);
+  if (dry - wet < 100) return false;
+  soilDryAdc = dry;
+  soilWetAdc = wet;
   ensurePrefs();
   prefs.putInt("soilDry", soilDryAdc);
   prefs.putInt("soilWet", soilWetAdc);
+  return true;
 }
 
 void setAutoReadings(bool enabled, unsigned long intervalMs) {

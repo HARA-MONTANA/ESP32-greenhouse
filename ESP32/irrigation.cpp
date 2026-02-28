@@ -30,6 +30,21 @@ bool dailyLimitNotified = false;
 // ADC ESP32 es de 12 bits (0-4095). Extremos indican corto o circuito abierto.
 const int ADC_FAULT_LOW  = 50;    // cortocircuito: los pines estan en corto
 const int ADC_FAULT_HIGH = 4050;  // circuito abierto: sensor desconectado o roto
+
+// Debounce del flotador: requiere 3 lecturas consecutivas HIGH (sin agua)
+// para reportar tanque vacio. Evita falsos positivos por vibracion mecanica.
+const int FLOAT_DEBOUNCE_COUNT = 3;
+int floatLowCount = FLOAT_DEBOUNCE_COUNT;  // inicia asumiendo agua disponible
+bool floatDebounced = true;
+
+// Maquina de estados para riego no bloqueante
+enum class IrrigationPhase { IDLE, PUMPING, SETTLING };
+IrrigationPhase irrigPhase = IrrigationPhase::IDLE;
+unsigned long pumpStartMs    = 0;
+unsigned long pumpDurMs      = 0;
+unsigned long settleStartMs  = 0;
+float  irrigTotalMl   = 0;
+int    irrigInitPct   = 0;
 }  // namespace
 
 void initIrrigationHardware() {
@@ -44,7 +59,23 @@ void pumpOff() { digitalWrite(PIN_PUMP, PUMP_OFF_LEVEL); }
 
 int readSoilMoisture() { return analogRead(PIN_SUELO); }
 
-bool isTankWaterAvailable() { return digitalRead(PIN_FLOAT) == LOW; }
+// Actualiza el debounce del flotador; llamar desde el loop principal (~2 s).
+// El flotador es mecanico: requiere 3 lecturas consecutivas HIGH para declarar
+// el tanque vacio, evitando falsas alertas por vibracion.
+void updateTankFloat() {
+  bool raw = digitalRead(PIN_FLOAT) == LOW;  // LOW = float arriba = agua disponible
+  if (raw) {
+    floatLowCount = FLOAT_DEBOUNCE_COUNT;
+    floatDebounced = true;
+  } else {
+    if (floatLowCount > 0) floatLowCount--;
+    floatDebounced = (floatLowCount > 0);
+  }
+}
+
+bool isTankWaterAvailable() { return floatDebounced; }
+
+bool isIrrigating() { return irrigPhase != IrrigationPhase::IDLE; }
 
 int soilPercentFromAdc(int reading) {
   const int dryAdc = getSoilDryAdc();
@@ -57,6 +88,8 @@ int soilPercentFromAdc(int reading) {
 }
 
 bool checkSoilAndIrrigate() {
+  if (isIrrigating()) return false;  // ya hay un riego en curso
+
   const int soilReading = readSoilMoisture();
   const int soilPercent = soilPercentFromAdc(soilReading);
 
@@ -127,6 +160,8 @@ void irrigate(int initialSoilReading) {
   irrigateVolume(totalMl, initialSoilReading);
 }
 
+// Inicia el riego de forma NO BLOQUEANTE. El ciclo completo (bombeo + asentamiento
+// + log) lo lleva a cabo tickIrrigation(), que debe llamarse desde loop().
 void irrigateVolume(float totalMl, int initialSoilReading) {
   const float flow = getPumpFlow();
 
@@ -135,43 +170,67 @@ void irrigateVolume(float totalMl, int initialSoilReading) {
     return;
   }
 
-  const int initialAdc = initialSoilReading >= 0 ? initialSoilReading : readSoilMoisture();
-  const int initialPercent = soilPercentFromAdc(initialAdc);
-  const unsigned long pumpTimeMs = static_cast<unsigned long>((totalMl / flow) * 1000.0f);
-
-  pumpOn();
-  delay(pumpTimeMs);
-  pumpOff();
-
-  delay(5000);
-
-  const int finalAdc = readSoilMoisture();
-  const int finalPercent = soilPercentFromAdc(finalAdc);
-
-  String msg = "Riego completado | Etapa: " + stageToString(getCurrentStage());
-  msg += " | " + String(totalMl, 1) + " mL";
-  msg += " | Bomba: " + String(pumpTimeMs / 1000.0f, 1) + " s";
-  msg += " | Suelo: " + String(initialPercent) + "% -> " + String(finalPercent) + "%";
-  broadcastMessage(msg);
-
-  // Log a SD card con lecturas de ambiente del momento del riego
-  String det = "etapa " + stageToString(getCurrentStage())
-             + "; " + String(totalMl, 1) + " mL"
-             + "; bomba " + String(pumpTimeMs / 1000.0f, 1) + "s"
-             + "; suelo " + String(initialPercent) + "%->" + String(finalPercent) + "%";
-  float irrTemp = NAN, irrRh = NAN;
-  readAmbient(irrTemp, irrRh);
-  // soilPct: usar finalPercent (estado tras el riego); mqRaw: no relevante para riego
-  logAccionConSensores("RIEGO", det, irrTemp, irrRh, finalPercent, -1);
-
-  if (finalPercent <= initialPercent) {
-    broadcastMessage("Riego sin incremento de humedad; verifica bomba y mangueras.");
+  if (isIrrigating()) {
+    broadcastMessage("Riego ya en curso; intenta de nuevo al terminar.");
+    return;
   }
 
-  time_t now;
-  time(&now);
-  if (now > 0) {
-    setLastIrrigationEpoch(static_cast<unsigned long>(now));
+  const int initialAdc = initialSoilReading >= 0 ? initialSoilReading : readSoilMoisture();
+  irrigInitPct  = soilPercentFromAdc(initialAdc);
+  irrigTotalMl  = totalMl;
+  pumpDurMs     = static_cast<unsigned long>((totalMl / flow) * 1000.0f);
+
+  pumpOn();
+  pumpStartMs = millis();
+  irrigPhase  = IrrigationPhase::PUMPING;
+}
+
+// Avanza la maquina de estados de riego. Llamar desde loop() en cada iteracion.
+// Maneja: fin de bombeo -> asentamiento (5 s) -> log y actualizacion de timestamp.
+void tickIrrigation() {
+  if (irrigPhase == IrrigationPhase::IDLE) return;
+
+  unsigned long now = millis();
+
+  if (irrigPhase == IrrigationPhase::PUMPING) {
+    if (now - pumpStartMs >= pumpDurMs) {
+      pumpOff();
+      settleStartMs = now;
+      irrigPhase = IrrigationPhase::SETTLING;
+    }
+    return;
+  }
+
+  if (irrigPhase == IrrigationPhase::SETTLING) {
+    if (now - settleStartMs < 5000) return;
+
+    const int finalAdc  = readSoilMoisture();
+    const int finalPct  = soilPercentFromAdc(finalAdc);
+    plantStage stage    = getCurrentStage();
+
+    String msg = "Riego completado | Etapa: " + stageToString(stage);
+    msg += " | " + String(irrigTotalMl, 1) + " mL";
+    msg += " | Bomba: " + String(pumpDurMs / 1000.0f, 1) + " s";
+    msg += " | Suelo: " + String(irrigInitPct) + "% -> " + String(finalPct) + "%";
+    broadcastMessage(msg);
+
+    String det = "etapa " + stageToString(stage)
+               + "; " + String(irrigTotalMl, 1) + " mL"
+               + "; bomba " + String(pumpDurMs / 1000.0f, 1) + "s"
+               + "; suelo " + String(irrigInitPct) + "%->" + String(finalPct) + "%";
+    float irrTemp = NAN, irrRh = NAN;
+    readAmbient(irrTemp, irrRh);
+    logAccionConSensores("RIEGO", det, irrTemp, irrRh, finalPct, -1);
+
+    if (finalPct <= irrigInitPct) {
+      broadcastMessage("Riego sin incremento de humedad; verifica bomba y mangueras.");
+    }
+
+    time_t t;
+    time(&t);
+    if (t > 0) setLastIrrigationEpoch(static_cast<unsigned long>(t));
+
+    irrigPhase = IrrigationPhase::IDLE;
   }
 }
 
